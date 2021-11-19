@@ -31,7 +31,7 @@ class WorkbookStruct:
     def __init__(self, sheet_refs):
         self.sheet_refs = sheet_refs
 
-class HiddenState(Enum)
+class HiddenState(Enum):
     VISIBLE = 0
     HIDDEN = 1
     VERY_HIDDEN = 2

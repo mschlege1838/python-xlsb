@@ -42,7 +42,7 @@ class PartInfo:
         self.content_type = content_type
         self.relationships = relationships
     
-    def get_relationship(self, by_name, value):
+    def get_rel(self, by_name, value):
         if by_name == 'Id':
             by_name = 'rid'
         elif by_name == 'Type':

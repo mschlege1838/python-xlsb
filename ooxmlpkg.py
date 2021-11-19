@@ -87,7 +87,7 @@ class ZipOfficeOpenXMLPackage:
     
     
     def get_part_info(self, path=None):
-        path, psegs = norm_path(path)
+        path, psegs = norm_path(path, True, True)
         
         if not path:
             try:

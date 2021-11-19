@@ -3,12 +3,14 @@ import struct
 from enum import Enum
 
 from btypes import BinaryRecordType
-from bprocessor import UnexpectedRecordException
+from bprocessor import UnexpectedRecordException, RecordProcessor
 
 
 class WorkbookPart:
     @staticmethod
-    def read(rprocessor):
+    def read(stream):
+        rprocessor = stream if isinstance(stream, RecordProcessor) else RecordProcessor(stream)
+    
         r = rprocessor.read_descriptor()
         if r.rtype != BinaryRecordType.BrtBeginBook:
             raise UnexpectedRecordException(r, BinaryRecordType.BrtBeginBook)

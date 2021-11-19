@@ -1,4 +1,7 @@
 
+import struct
+from enum import Enum
+
 from btypes import BinaryRecordType
 from bprocessor import UnexpectedRecordException
 
@@ -11,7 +14,7 @@ class WorkbookStruct:
             raise UnexpectedRecordException(r, BinaryRecordType.BrtBeginBook)
         
         while r.rtype != BinaryRecordType.BrtBeginBundleShs:
-            r.skip()
+            r.skip(rprocessor)
             r = rprocessor.read_descriptor()
         
         sheet_refs = []
@@ -28,7 +31,11 @@ class WorkbookStruct:
     def __init__(self, sheet_refs):
         self.sheet_refs = sheet_refs
 
-
+class HiddenState(Enum)
+    VISIBLE = 0
+    HIDDEN = 1
+    VERY_HIDDEN = 2
+    
 class BundledSheet:
     
     @staticmethod
@@ -37,10 +44,28 @@ class BundledSheet:
         i_tab_id = struct.unpack('<I', rprocessor.read(4))[0]
         rel_id = rprocessor.read_xl_nullable_w_string()
         sheet_name = rprocessor.read_xl_nullable_w_string()
+        return BundledSheet(HiddenState(hs_state), i_tab_id, rel_id, sheet_name)
     
-    def __init__(self, hidden, tab_id, rel_id, sheet_name):
-        self.hidden = hidden
+    @staticmethod
+    def check_sheet_name(name):
+        for reserved in ('\0', '\u0003', ':', '\\', '*', '?', '/', '[', ']'):
+            if reserved in name:
+                raise ValueError(f'Sheet name cannot contain "{reserved}": {name}')
+        if name.startswith("'") or name.endswith("'"):
+            raise ValueError(f'Sheet name cannot start or end with "\'": {name}')
+    
+    def __init__(self, hidden_state, tab_id, rel_id, sheet_name):
+        self.hidden_state = hidden_state
         self.tab_id = tab_id
         self.rel_id = rel_id
-        self.sheet_name = sheet_name
+        BundledSheet.check_sheet_name(sheet_name)
+        self._sheet_name = sheet_name
     
+    @property
+    def sheet_name(self):
+        return self._sheet_name
+    
+    @sheet_name.setter
+    def sheet_name(self, value):
+        BundledSheet.check_sheet_name(value)
+        self._sheet_name = value

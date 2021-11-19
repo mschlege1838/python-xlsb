@@ -13,7 +13,14 @@ from collections import deque
 from btypes import RelationshipType, ContentType, XMLNSName
 
 
-def norm_path(path, return_segs=False):
+def norm_path(path, return_segs=False, return_path=True):
+    if not path:
+        path = ''
+    elif isinstance(path, PartRelationship):
+        path = path.target
+    elif isinstance(path, PartInfo):
+        path = path.path
+
     psegs = deque()
     for seg in path.split('/'):
         if not seg or seg == '.':
@@ -23,7 +30,10 @@ def norm_path(path, return_segs=False):
                 psegs.pop()
         else:
             psegs.append(seg)
-    return psegs if return_segs else '/'.join(psegs)
+    if return_path and return_segs:
+        return '/'.join(psegs), psegs
+    else:
+        return psegs if return_segs else '/'.join(psegs)
 
 
 class PartInfo:
@@ -77,14 +87,14 @@ class ZipOfficeOpenXMLPackage:
     
     
     def get_part_info(self, path=None):
-        if not path or path == '/':
+        path, psegs = norm_path(path)
+        
+        if not path:
             try:
                 return PartInfo('/', None, PartRelationship.from_xml(self.open_part('_rels/.rels')))
             except FileNotFoundError:
                 return PartInfo('/', None, [])
         else:
-            psegs = norm_path(path, True)
-            path = '/'.join(psegs)
             if not self.exists(path):
                 return None
             
@@ -127,7 +137,7 @@ class ZipOfficeOpenXMLPackage:
         raise ValueError(f'Unable to determine content type: {path} (No matching override or default)')
     
     
-    def exists(self, path)
+    def exists(self, path):
         path = norm_path(path)
         
         if self.extract_dir:

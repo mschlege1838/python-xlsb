@@ -1,5 +1,57 @@
-
 from enum import Enum
+
+class RelationshipType(Enum):
+    WORKBOOK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument'
+    WORKSHEET = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'
+    SHARED_STRINGS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings'
+    
+    @staticmethod
+    def resolve(value):
+        try:
+            return RelationshipType(value)
+        except ValueError:
+            return OtherRelationshipType(value)
+
+class OtherRelationshipType:
+    def __init__(self, value):
+        self.value = value
+    
+    @property
+    def name(self):
+        return '<OtherRelationshipType>'
+    
+    def __str__(self):
+        return f'{self.name}: {self.value}'
+
+
+class ContentType(Enum):
+    WORKBOOK = 'application/vnd.ms-excel.sheet.binary.macroEnabled.main'
+    RELS = 'application/vnd.openxmlformats-package.relationships+xml'
+    WORKSHEET = 'application/vnd.ms-excel.worksheet'
+    
+    @staticmethod
+    def resolve(value):
+        try:
+            return ContentType(value)
+        except ValueError:
+            return OtherContentType(value)
+
+class OtherContentType:
+    def __init__(self, value):
+        self.value = value
+    
+    @property
+    def name(self):
+        return '<OtherContentType>'
+    
+    def __str__(self):
+        return f'{self.name}: {self.value}'
+
+
+class XMLNSName(Enum):
+    RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships'
+    CONTENT_TYPES = 'http://schemas.openxmlformats.org/package/2006/content-types'
+
 
 class BinaryRecordType(Enum):
     BrtAbsPath15 = 2071

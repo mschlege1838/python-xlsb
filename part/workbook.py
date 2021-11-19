@@ -26,7 +26,7 @@ class WorkbookPart:
         if r.rtype != BinaryRecordType.BrtEndBundleShs:
             raise UnexpectedRecordException(r, BinaryRecordType.BrtEndBundleShs)
         
-        return WorkbookStruct(sheet_refs)
+        return WorkbookPart(sheet_refs)
     
     def __init__(self, sheet_refs):
         self.sheet_refs = sheet_refs

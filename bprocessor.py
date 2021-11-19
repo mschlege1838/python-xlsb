@@ -18,6 +18,9 @@ class UnexpectedRecordException(Exception):
         self.record = record
         self.expected = expected
 
+class UnexpectedRecordSizeException(Exception):
+    def __init__(self, read_size, record):
+        super().__init__(f'Unexpected read size for record: {read_size}; {record}')
 
 # Types
 class RecordDescriptor:
@@ -103,6 +106,16 @@ class RecordProcessor:
                 break
         
         return RecordDescriptor(rtype, size)
+    
+    def read_xl_nullable_w_string(self):
+        cch_characters = self.read(4)
+        if cch_characters == 0xffffffff:
+            return None
+        
+        cch_len = struct.unpack('<I', cch_characters)[0] * 2
+        rgch_data = self.read(cch_len).decode('utf-16')
+        
+        return rgch_data
     
     
     def read(self, size):

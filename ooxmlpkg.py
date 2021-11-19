@@ -64,13 +64,14 @@ class PartInfo:
 class PartRelationship:
     
     @staticmethod
-    def from_xml(stream):
+    def from_xml(root, stream):
         ns = {'': XMLNSName.RELATIONSHIPS.value}
         
-        root = ET.parse(stream)
+        root_et = ET.parse(stream)
         result = []
-        for el in root.findall('.//Relationship', ns):
-            result.append(PartRelationship(el.get('Id'), RelationshipType.resolve(el.get('Type')), el.get('Target')))
+        for el in root_et.findall('.//Relationship', ns):
+            target = el.get('Target')
+            result.append(PartRelationship(el.get('Id'), RelationshipType.resolve(el.get('Type')), f'{root}/{target}' if root else target))
         return result
     
     def __init__(self, rid, rtype, target):
@@ -91,7 +92,7 @@ class ZipOfficeOpenXMLPackage:
         
         if not path:
             try:
-                return PartInfo('/', None, PartRelationship.from_xml(self.open_part('_rels/.rels')))
+                return PartInfo('/', None, PartRelationship.from_xml('', self.open_part('_rels/.rels')))
             except FileNotFoundError:
                 return PartInfo('/', None, [])
         else:
@@ -99,12 +100,14 @@ class ZipOfficeOpenXMLPackage:
                 return None
             
             content_type = self.determine_content_type(path)
+            root = '/'.join(list(psegs)[:-1])
             
             psegs.insert(-1, '_rels')
             psegs[-1] = f'{psegs[-1]}.rels'
             rel_path = '/'.join(psegs)
+            
             try:
-                return PartInfo(path, content_type, PartRelationship.from_xml(self.open_part(rel_path)))
+                return PartInfo(path, content_type, PartRelationship.from_xml(root, self.open_part(rel_path)))
             except FileNotFoundError:
                 return PartInfo(part, content_type, [])
     
@@ -167,7 +170,7 @@ class ZipOfficeOpenXMLPackage:
                 try:
                     return f.open(path)
                 except KeyError:
-                    raise FileNotFoundError(f'Item not contained in archive: {path}')
+                    raise FileNotFoundError(f'Item not contained in archive: {path}') from None
     
     
     def extract_temp(self):

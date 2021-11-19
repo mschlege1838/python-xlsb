@@ -6,7 +6,7 @@ from btypes import BinaryRecordType
 from bprocessor import UnexpectedRecordException
 
 
-class WorkbookStruct:
+class WorkbookPart:
     @staticmethod
     def read(rprocessor):
         r = rprocessor.read_descriptor()

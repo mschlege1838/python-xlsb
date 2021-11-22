@@ -3,6 +3,7 @@ import io
 import struct
 from collections import deque
 from enum import Enum, auto
+from tempfile import TemporaryFile
 
 from btypes import BinaryRecordType, FutureRecordType, AlternateContentRecordType
 
@@ -24,28 +25,46 @@ class UnexpectedRecordSizeException(Exception):
 
 # Types
 class RecordDescriptor:
-    def __init__(self, rtype, size):
+    
+    @staticmethod
+    def skip_until(rprocessor, repository, *until_lst):
+        while True:
+            r = rprocessor.read_descriptor()
+            if r.rtype in until_lst:
+                break
+            r.skip(rprocessor, repository)
+        return r
+    
+
+    def __init__(self, rtype, size=0):
         self.rtype = rtype
         self.size = size
     
-    def write(self, processor):
+    def write(self, stream):
+        rprocessor = RecordProcessor.resolve(stream)
+    
         rtype = self.rtype.value
         if rtype <= 0x7f:
-            processor.write(rtype)
+            rprocessor.write(rtype)
         else:
             d = struct.pack('<H', rtype)
-            processor.write(0x80 | d[0])
-            processor.write((d[1] << 1) | ((d[0] & 0x80) >> 7))
+            rprocessor.write(0x80 | d[0])
+            rprocessor.write((d[1] << 1) | ((d[0] & 0x80) >> 7))
         
         dsize = struct.pack('<I', self.size)
         for i in range(3):
-            has_next = dsize[i + 1] != 0
-            processor.write(0x80 | (dsize[i] & 0x7f) if has_next else (dsize[i] & 0x7f))
+            has_next = dsize[i + 1] != 0 or (dsize[i] & 0x80)
+            o = dsize[i] if i == 0 else ((dsize[i] << 1) | ((dsize[i - 1] & 0x80) >> 7))
+            rprocessor.write((0x80 | o) if has_next else (o & 0x7f))
             if not has_next:
                 break
     
-    def skip(self, target):
-        target.seek(self.size, io.SEEK_CUR)
+    def skip(self, target, repository=None):
+        if repository:
+            repository.store(self, target.read(self.size, single_as_int=False))
+        else:
+            target.seek(self.size, io.SEEK_CUR)
+
     
     def __str__(self):
         return f'{self.rtype} ({self.size} bytes)'
@@ -58,6 +77,34 @@ class RecordReadState(Enum):
 
 
 class RecordProcessor:
+    
+    empty_data = bytes(0)
+    
+    @staticmethod
+    def check_rel_id(value):
+        if not value:
+            return
+        if len(value) > 255:
+            raise ValueError(f'Character length must be less than 255: {value}')
+        if '\0' in value:
+            raise ValueError(f'Must not contain the NUL character: {value}')
+    
+    @staticmethod
+    def len_xl_w_string(value, nullable=True):
+        if value is None:
+            if nullable:
+                return 4
+            else:
+                if len(value) >= 0xffffffff:
+                    raise ValueError(f'Character length must be less than {0xffffffff}: {value}')
+        
+        return 4 + len(value) * 2
+    
+    @staticmethod
+    def resolve(stream):
+        return stream if isinstance(stream, RecordProcessor) else RecordProcessor(stream)
+    
+    
     def __init__(self, stream):
         self.stream = stream
         self.read_stack = deque()
@@ -107,23 +154,40 @@ class RecordProcessor:
         
         return RecordDescriptor(rtype, size)
     
-    def read_xl_nullable_w_string(self):
+    def read_xl_w_string(self, nullable=True):
         cch_characters = self.read(4)
         if cch_characters == 0xffffffff:
-            return None
+            if nullable:
+                return None
+            else:
+                raise ValueError(f'Character length must be less than {0xffffffff}.')
         
         cch_len = struct.unpack('<I', cch_characters)[0] * 2
-        rgch_data = self.read(cch_len).decode('utf-16')
+        rgch_data = self.read(cch_len).decode('utf-16le')
         
         return rgch_data
     
+    def write_xl_w_string(self, value, nullable=True):
+        if nullable:
+            if value is None:
+                self.write(struct.pack('<I', 0xffffffff))
+                return
+        else:
+            if len(value) >= 0xffffffff:
+                raise ValueError(f'Character length must be less than {0xffffffff}: {value}')
+        
+        self.write(struct.pack('<I', len(value)))
+        self.write(value.encode('utf-16le'))
+
     
-    def read(self, size):
-        if size <= 0:
+    def read(self, size, *, single_as_int=True):
+        if size < 0:
             raise ValueError(size)
+        if size == 0:
+            return RecordProcessor.empty_data
         
         stream = self.stream
-        if size == 1:
+        if size == 1 and single_as_int:
             single_buf = self.single_buf
             ct = stream.readinto(single_buf)
             if ct == 0:
@@ -143,3 +207,59 @@ class RecordProcessor:
     
     def seek(self, n, whence=io.SEEK_SET):
         self.stream.seek(n, whence)
+    
+
+
+
+class RecordCopy:
+    def __init__(self, descriptor, data_len, data_file):
+        self.descriptor = descriptor
+        self.data_len = data_len
+        self.data_file = data_file
+    
+    def write_to(self, stream):
+        self.descriptor.write(stream)
+        stream.write(self.data_file)
+    
+    def __len__(self):
+        return self.data_len
+
+class RecordRepository:
+    def __init__(self):
+        self.queue = deque()
+        self.current = []
+    
+    def store(self, descriptor, data):
+        if data:
+            f = TemporaryFile()
+            f.write(data)
+            f.seek(0)
+        else:
+            f = None
+        
+        self.current.append(RecordCopy(descriptor, len(data), f))
+    
+    def push_current(self):
+        self.queue.append(self.current)
+        self.current = []
+    
+    def write_poll(self, target):
+        for item in self.queue.popleft():
+            item.descriptor.write(target)
+            
+            data_file = item.data_file
+            if data_file:
+                target.write(data_file.read())
+                data_file.close()
+    
+    def __len__(self):
+        result = 0
+        for l in self.queue:
+            for i in l:
+                result += len(i)
+        return result
+    
+    def __bool__(self):
+        return True
+    
+    

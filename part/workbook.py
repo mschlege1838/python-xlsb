@@ -19,9 +19,8 @@ class WorkbookPart:
         repository = RecordRepository() if for_update else None
         
         # Skip 1
-        r = RecordDescriptor.skip_until(rprocessor, repository, BinaryRecordType.BrtBeginBundleShs)
-        if for_update:
-            repository.push_current()
+        r = rprocessor.skip_until(BinaryRecordType.BrtBeginBundleShs, repository=repository)
+        repository.push_current()
         
         # Sheet References
         sheet_refs = []
@@ -35,9 +34,8 @@ class WorkbookPart:
         
         
         # Skip 2
-        RecordDescriptor.skip_until(rprocessor, repository, BinaryRecordType.BrtEndBook)
-        if for_update:
-            repository.push_current()
+        rprocessor.skip_until(BinaryRecordType.BrtEndBook, repository=repository)
+        repository.push_current()
         
         return WorkbookPart(sheet_refs, repository=repository)
     

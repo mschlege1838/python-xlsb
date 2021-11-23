@@ -1,5 +1,13 @@
 from enum import Enum
 
+def validate_rw(value):
+    if value < 0 or value > 1048575:
+        raise ValueError(f'Row index must be between 0 and 1048575: {value}')
+
+def validate_col(value):
+    if value < 0 or value > 16383:
+        raise ValueError(f'Column index must be between 0 and 16383: {value}')
+
 class RelationshipType(Enum):
     WORKBOOK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument'
     WORKSHEET = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'

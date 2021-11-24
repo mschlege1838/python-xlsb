@@ -113,6 +113,7 @@ class RecordProcessor:
     def skip_while(self, *while_lst, current=None, repository=None):
         while True:
             r = current if current else self.read_descriptor()
+            current = None
             if r.rtype not in while_lst:
                 break
             r.skip(self, repository)

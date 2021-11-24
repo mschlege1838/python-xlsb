@@ -222,7 +222,7 @@ class RkCell:
         else:
             num = struct.unpack('<d', bytes(4) + rbuf)[0]
         
-        if f_int:
+        if f_x100:
             num /= 100
         
         return RkCell(cell, num)

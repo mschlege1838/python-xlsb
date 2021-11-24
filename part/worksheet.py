@@ -190,6 +190,8 @@ class Cell:
         flags = rprocessor.read(1)
         show_phonetic_info = flags & 0x80
         reserved = flags & 0x7f
+        
+        return Cell(column, i_style_ref, bool(show_phonetic_info))
     
     def __init__(self, column, style_index, show_phonetic_info):
         self.column = column

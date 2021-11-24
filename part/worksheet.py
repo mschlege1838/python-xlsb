@@ -1,11 +1,27 @@
 
 import struct
-from collections import deque
 
+import btypes
 from btypes import BinaryRecordType
 from bprocessor import UnexpectedRecordException, RecordProcessor, RecordRepository, RecordDescriptor
 
-class WorksheetPart
+
+error_lookup = {
+    0x00: '#NULL!',
+    0x07: '#DIV/0!',
+    0x0F: '#VALUE!',
+    0x17: '#REF!',
+    0x1D: '#NAME?',
+    0x24: '#NUM!',
+    0x2A: '#N/A',
+    0x2B: '#GETTING_DATA'
+}
+    
+error_rlookup = dict((v, k) for k, v in error_lookup.items())
+
+
+
+class WorksheetPart:
     @staticmethod
     def read(stream, for_update=False):
         rprocessor = RecordProcessor.resolve(stream)
@@ -38,6 +54,7 @@ class WorksheetPart
         
         # Skip 3
         if r.rtype == BinaryRecordType.BrtACBegin:
+            r.skip(rprocessor, repository)
             r = rprocessor.skip_until(BinaryRecordType.BrtACEnd, repository=repository, skip_last=True)
         if r.rtype == BinaryRecordType.BrtWsFmtInfo:
             r.skip(rprocessor, repository)
@@ -56,6 +73,7 @@ class WorksheetPart
                 raise UnexpectedRecordException(r, BinaryRecordType.BrtEndColInfos)
             r = rprocessor.read_descriptor()
         
+        
         # Cell Table
         if r.rtype != BinaryRecordType.BrtBeginSheetData:
             raise UnexpectedRecordException(r, BinaryRecordType.BrtBeginSheetData)
@@ -63,9 +81,11 @@ class WorksheetPart
         # Rows
         rows = []
         r = rprocessor.read_descriptor()
-        while True:
+        rows_done = False
+        while not rows_done:
             # Skip 4
             if r.rtype == BinaryRecordType.BrtACBegin:
+                r.skip(rprocessor, repository)
                 r = rprocessor.skip_until(BinaryRecordType.BrtACEnd, repository=repository, skip_last=True)
             repository.push_current()
             
@@ -78,8 +98,15 @@ class WorksheetPart
             r = rprocessor.read_descriptor()
             while True:
                 # Skip 5
-                rprocessor.skip_while(BinaryRecordType.BrtCellMeta, BinaryRecordType.BrtValueMeta, repository=repository, skip_last=True)
+                r = rprocessor.skip_while(BinaryRecordType.BrtCellMeta, BinaryRecordType.BrtValueMeta, repository=repository, current=r)
                 repository.push_current()
+                
+                if r.rtype == BinaryRecordType.BrtEndSheetData:
+                    rows_done = True
+                    break
+                
+                if r.rtype in (BinaryRecordType.BrtRowHdr, BinaryRecordType.BrtACBegin):
+                    break
                 
                 if r.rtype == BinaryRecordType.BrtCellBlank:
                     cells.append(BlankCell.read(rprocessor))
@@ -112,28 +139,45 @@ class WorksheetPart
                     raise Exception('Not Implemented')
                     
                     # Skip 6
-                    rprocessor.skip_while(BinaryRecordType.BrtCellMeta, BinaryRecordType.BrtValueMeta, repository=repository, skip_last=True)
+                    r = rprocessor.skip_while(BinaryRecordType.BrtCellMeta, BinaryRecordType.BrtValueMeta, repository=repository, skip_last=True)
                     repository.push_current()
                     
                     if r.rtype == BinaryRecordType.BrtCellRk:
-                        cells.append(RkCell.read(rprocessor))
+                        (RkCell.read(rprocessor))
                     if r.rtype == BinaryRecordType.BrtCellError:
-                        cells.append(ErrorCell.read(rprocessor))
+                        (ErrorCell.read(rprocessor))
                     if r.rtype == BinaryRecordType.BrtCellBool:
-                        cells.append(BoolCell.read(rprocessor))
+                        (BoolCell.read(rprocessor))
                     if r.rtype == BinaryRecordType.BrtCellReal:
-                        cells.append(RealCell.read(rprocessor))
+                        (RealCell.read(rprocessor))
                     if r.rtype == BinaryRecordType.BrtCellSt:
-                        cells.append(InlineStringCell.read(rprocessor))
+                        (InlineStringCell.read(rprocessor))
                     else:
                         raise UnexpectedRecordException(BinaryRecordType.BrtCellRk, BinaryRecordType.BrtCellError, BinaryRecordType.BrtCellBool,
                                 BinaryRecordType.BrtCellReal, BinaryRecordType.BrtCellSt)
                     
                 else:
-                    raise UnexpectedRecordException(r, BinaryRecordType.BrtCellBlank, BinaryRecordType.BrtCellRk, BinaryRecordType.BrtCellError, BinaryRecordType.BrtCellBool
+                    raise UnexpectedRecordException(r, BinaryRecordType.BrtCellBlank, BinaryRecordType.BrtCellRk, BinaryRecordType.BrtCellError, BinaryRecordType.BrtCellBool,
                             BinaryRecordType.BrtCellReal, BinaryRecordType.BrtCellIsst, BinaryRecordType.BrtCellSt, BinaryRecordType.BrtFmlaString, BinaryRecordType.BrtFmlaNum,
                             BinaryRecordType.BrtFmlaBool, BinaryRecordType.BrtFmlaError, BinaryRecordType.BrtShrFmla, BinaryRecordType.BrtArrFmla, BinaryRecordType.BrtTable)
                 
+                r = rprocessor.read_descriptor()
+                
+                
+            rows.append(Row(row_header, cells))
+        
+        
+        rprocessor.skip_until(BinaryRecordType.BrtEndSheet, repository=repository)
+        
+        return WorksheetPart(sheet_dimension, col_info, rows, repository=repository)
+
+
+    def __init__(self, sheet_dimension, col_info, rows, *, repository=None):
+        self.sheet_dimension = sheet_dimension
+        self.col_info = col_info
+        self.rows = rows
+        self.repository = repository
+
 
 class Cell:
     @staticmethod
@@ -181,20 +225,13 @@ class RkCell:
     def __init__(self, cell, num):
         self.cell = cell
         self.num = num
+    
+    @property
+    def value(self):
+        return self.num
 
 class ErrorCell:
-    lookup = {
-        0x00: '#NULL!',
-        0x07: '#DIV/0!',
-        0x0F: '#VALUE!',
-        0x17: '#REF!',
-        0x1D: '#NAME?',
-        0x24: '#NUM!',
-        0x2A: '#N/A',
-        0x2B: '#GETTING_DATA'
-    }
     
-    rlookup = dict((v, k) for k, v in ErrorCell.items())
     
     @staticmethod
     def read(stream):
@@ -209,12 +246,16 @@ class ErrorCell:
         self.error_number = error_number
     
     @property
+    def value(self):
+        return self.error
+    
+    @property
     def error(self):
-        return ErrorCell.lookup[self.error_number]
+        return error_lookup[self.error_number]
     
     @error.setter
     def error(self, value):
-        self.error_number = ErrorCell.rlookup[value]
+        self.error_number = error_rlookup[value]
 
 
 class BoolCell:
@@ -230,6 +271,10 @@ class BoolCell:
     
     def __init__(self, cell, val):
         self.val = val
+    
+    @property
+    def value(self):
+        return self.val
 
 
 class RealCell:
@@ -242,18 +287,26 @@ class RealCell:
     def __init__(self, cell, num):
         self.cell = cell
         self.num = num
+    
+    @property
+    def value(self):
+        return self.num
 
 
 class SharedStringCell:
     @staticmethod
     def read(stream):
         cell = Cell.read(stream)
-        isst = struct.unpack('<I', stream.read(4))
+        isst = struct.unpack('<I', stream.read(4))[0]
         return SharedStringCell(cell, isst)
-        
-    
+
+
     def __init__(self, cell, str_index):
         self.str_index = str_index
+    
+    @property
+    def value(self):
+        return f'<SharedIndex> {self.str_index}'
 
 
 class InlineStringCell:
@@ -272,7 +325,16 @@ class InlineStringCell:
         InlineStringCell.check_value(val)
         self.cell = cell
         self.val = val
+    
+    @property
+    def value(self):
+        return self.val
 
+
+class Row:
+    def __init__(self, header, cells):
+        self.header = header
+        self.cells = cells
 
 class RowHeader:
     @staticmethod

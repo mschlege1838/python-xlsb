@@ -923,6 +923,10 @@ class ExtendedRecordType:
     def value(self):
         return self.tnumber
     
+    @property
+    def rtype(self):
+        return type(self)
+    
     def __str__(self):
         return self.name
 

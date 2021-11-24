@@ -15,7 +15,7 @@ class UnexpectedEOFException(Exception):
 
 class UnexpectedRecordException(Exception):
     def __init__(self, record, *expected):
-        super().__init__(f'Unexpected record: {record}; Expected: {", ".join(expected)}')
+        super().__init__(f'Unexpected record: {record}; Expected: {", ".join(str(i) for i in expected)}')
         self.record = record
         self.expected = expected
 
@@ -102,22 +102,20 @@ class RecordProcessor:
     
     def skip_until(self, *until_lst, repository=None, skip_last=False):
         while True:
-            r = rprocessor.read_descriptor()
+            r = self.read_descriptor()
             if r.rtype in until_lst:
                 if skip_last:
-                    r.skip(rprocessor, repository)
+                    r.skip(self, repository)
                 break
-            r.skip(rprocessor, repository)
+            r.skip(self, repository)
         return self.read_descriptor() if skip_last else r
     
-    def skip_while(self, *until_lst, repository=None, skip_last=False):
+    def skip_while(self, *while_lst, current=None, repository=None):
         while True:
-            r = rprocessor.read_descriptor()
-            if r.rtype not in until_lst:
-                if skip_last:
-                    r.skip(rprocessor, repository)
+            r = current if current else self.read_descriptor()
+            if r.rtype not in while_lst:
                 break
-            r.skip(rprocessor, repository)
+            r.skip(self, repository)
         return r
     
     def read_descriptor(self):
@@ -236,7 +234,7 @@ class RecordCopy:
 
 class RecordRepository:
     def __init__(self, for_update):
-        self.for_update = self.for_update
+        self.for_update = for_update
         if for_update:
             self.queue = deque()
             self.current = []

@@ -211,14 +211,17 @@ class RkCell:
         cell = Cell.read(stream)
         
         rbuf = bytearray(stream.read(4))
-        f_x100 = rbuf[0] & 0x80     # Seems to be ignored; all floating point values are 100 * the value presented.
-        f_int = rbuf[0] & 0x40
+        f_x100 = rbuf[0] & 0x01
+        f_int = rbuf[0] & 0x02
+        rbuf[0] = rbuf[0] & 0xfc
         
-        rbuf[0] = rbuf[0] & 0x3f << 2
-        if f_int:
-            num = struct.unpack('<i', rbuf)[0]
+        if f_int:   
+            num = struct.unpack('<i', rbuf)[0] >> 2
         else:
-            num = struct.unpack('<d', bytes(4) + rbuf)[0] / 100
+            num = struct.unpack('<d', bytes(4) + rbuf)[0]
+        
+        if f_int:
+            num /= 100
         
         return RkCell(cell, num)
     
@@ -231,14 +234,14 @@ class RkCell:
         return self.num
 
 class ErrorCell:
-    
-    
     @staticmethod
     def read(stream):
         rprocessor = RecordProcessor.resolve(stream)
         
         cell = Cell.read(rprocessor)
         b_error = rprocessor.read(1)
+        
+        return ErrorCell(cell, b_error)
         
     
     def __init__(self, cell, error_number):
@@ -266,7 +269,7 @@ class BoolCell:
         cell = Cell.read(stream)
         f_bool = stream.read(1)
         
-        return BoolCell(f_bool, bool(f_bool))
+        return BoolCell(cell, bool(f_bool))
         
     
     def __init__(self, cell, val):
@@ -320,6 +323,7 @@ class InlineStringCell:
         rprocessor = RecordProcessor.resolve(stream)
         cell = Cell.read(rprocessor)
         val = rprocessor.read_xl_w_string(False)
+        return InlineStringCell(cell, val)
     
     def __init__(self, cell, val):
         InlineStringCell.check_value(val)
@@ -356,21 +360,21 @@ class RowHeader:
         miy_row = struct.unpack('<H', rprocessor.read(2))[0]
         
         flags_1 = rprocessor.read(1)
-        extra_asc = flags_1 & 0x80
-        extra_dsc = flags_1 & 0x40
-        reserved_1 = flags_1 & 0x3f
+        extra_asc = flags_1 & 0x01
+        extra_dsc = flags_1 & 0x02
+        reserved_1 = flags_1 & 0xfc
         
         flags_2 = rprocessor.read(1)
-        i_out_level = flags_2 & 0xe0
-        f_collapsed = flags_2 & 0x10
-        f_dy_zero = flags_2 & 0x08
-        f_unsynced = flags_2 & 0x04
-        f_ghost_dirty = flags_2 & 0x02
-        f_reserved = flags_2 & 0x01
+        i_out_level = flags_2 & 0x07
+        f_collapsed = flags_2 & 0x08
+        f_dy_zero = flags_2 & 0x10
+        f_unsynced = flags_2 & 0x20
+        f_ghost_dirty = flags_2 & 0x40
+        f_reserved = flags_2 & 0x80
         
         flags_3 = rprocessor.read(1)
-        f_ph_show = flags_3 & 0x80
-        reserved_2 = flags_3 & 0x7f
+        f_ph_show = flags_3 & 0x01
+        reserved_2 = flags_3 & 0xfe
         
         ccol_span = struct.unpack('<I', rprocessor.read(4))[0]
         RowHeader.validate_ccol_span(ccol_span)
@@ -452,17 +456,17 @@ class ColInfo:
         ixfe = struct.unpack('<I', rprocessor.read(4))[0]
         
         flags_1 = rprocessor.read(1)
-        f_hidden = flags_1 & 0x80
-        f_user_set = flags_1 & 0x40
-        f_best_fit = flags_1 & 0x20
-        f_phonetic = flags_1 & 0x10
-        reserved_1 = flags_1 & 0x0f
+        f_hidden = flags_1 & 0x01
+        f_user_set = flags_1 & 0x02
+        f_best_fit = flags_1 & 0x04
+        f_phonetic = flags_1 & 0x08
+        reserved_1 = flags_1 & 0xf0
         
         flags_2 = rprocessor.read(1)
-        i_out_level = (flags_2 & 0xe0) >> 5
-        unused = flags_2 & 0x10
-        f_collapsed = flags_2 & 0x08
-        reserved_2 = flags_2 & 0x07
+        i_out_level = flags_2 & 0x07
+        unused = flags_2 & 0x08
+        f_collapsed = flags_2 & 0x10
+        reserved_2 = flags_2 & 0xe0
         
         return ColInfo(col_first, col_last, col_idx, ixfe, bool(f_hidden), bool(f_user_set), bool(f_best_fit), 
                 bool(f_phonetic), i_out_level, bool(f_collapsed))

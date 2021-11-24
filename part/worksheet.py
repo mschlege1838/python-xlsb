@@ -273,6 +273,7 @@ class BoolCell:
         
     
     def __init__(self, cell, val):
+        self.cell = cell
         self.val = val
     
     @property
@@ -305,6 +306,7 @@ class SharedStringCell:
 
 
     def __init__(self, cell, str_index):
+        self.cell = cell
         self.str_index = str_index
     
     @property

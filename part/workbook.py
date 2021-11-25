@@ -16,7 +16,7 @@ class WorkbookPart:
         if r.rtype != BinaryRecordType.BrtBeginBook:
             raise UnexpectedRecordException(r, BinaryRecordType.BrtBeginBook)
         
-        repository = RecordRepository() if for_update else None
+        repository = RecordRepository(for_update)
         
         # Skip 1
         r = rprocessor.skip_until(BinaryRecordType.BrtBeginBundleShs, repository=repository)

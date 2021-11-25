@@ -22,8 +22,7 @@ class SharedStringsPart:
         if r.rtype != BinaryRecordType.BrtBeginSst:
             raise UnexpectedRecordException(r, BinaryRecordType.BrtBeginSst)
         
-        cst_total = struct.unpack('<I', rprocessor.read(4))
-        cst_unique = struct.unpack('<I', rprocessor.read(4))
+        cst_total, cst_unique = struct.unpack('<I', rprocessor.read(8))
         SharedStringsPart.validate_str_count(cst_unique)
         
         items = []

@@ -59,7 +59,9 @@ class PartInfo:
                 return r
         
         return None
-
+    
+    def __str__(self):
+        return f'{self.path} ({self.content_type})
 
 class PartRelationship:
     
@@ -78,6 +80,9 @@ class PartRelationship:
         self.rid = rid
         self.rtype = rtype
         self.target = target
+    
+    def __str__(self):
+        return f'{self.rid}: {self.rtype} -> {self.target}'
     
 
 

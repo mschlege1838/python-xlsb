@@ -19,7 +19,7 @@ class SharedStringsPart:
         items = []
         while True:
             r = rprocessor.read_descriptor()
-            if r.rtype = BinaryRecordType.BrtSSTItem:
+            if r.rtype == BinaryRecordType.BrtSSTItem:
                 items.append(RichStr.read(rprocessor))
             elif r.rtype == BinaryRecordType.BrtEndSst:
                 break

@@ -68,7 +68,7 @@ class WorksheetPart:
             r = rprocessor.read_descriptor()
             while r.rtype == BinaryRecordType.BrtColInfo:
                 col_info.append(ColInfo.read(rprocessor))
-                r = r.read_descriptor()
+                r = rprocessor.read_descriptor()
             if r.rtype != BinaryRecordType.BrtEndColInfos:
                 raise UnexpectedRecordException(r, BinaryRecordType.BrtEndColInfos)
             r = rprocessor.read_descriptor()

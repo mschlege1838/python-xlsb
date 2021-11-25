@@ -4,13 +4,13 @@ from enum import Enum
 
 import btypes
 from btypes import BinaryRecordType
-from bprocessor import UnexpectedRecordException, RecordProcessor, RecordRepository, RecordDescriptor
+from bprocessor import UnexpectedRecordException, RecordProcessor
 
 
 class SharedStringsPart:
     @staticmethod
     def read(stream):
-        rprocessor = RecordDescriptor.resolve(stream)
+        rprocessor = RecordProcessor.resolve(stream)
         
         r = rprocessor.read_descriptor()
         if r.rtype != BinaryRecordType.BrtBeginSst:
@@ -41,7 +41,7 @@ class RichStr:
     
     @staticmethod
     def read(stream):
-        rprocessor = RecordDescriptor.resolve(stream)
+        rprocessor = RecordProcessor.resolve(stream)
         
         flags_1 = rprocessor.read(1)
         f_rich_str = flags_1 & 0x01

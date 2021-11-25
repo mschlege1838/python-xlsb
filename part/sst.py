@@ -4,32 +4,45 @@ from enum import Enum
 
 import btypes
 from btypes import BinaryRecordType
-from bprocessor import UnexpectedRecordException, RecordProcessor
+from bprocessor import UnexpectedRecordException, RecordProcessor, RecordRepository
 
 
 class SharedStringsPart:
     @staticmethod
-    def read(stream):
+    def validate_str_count(value):
+        if value > 0x7fffffff:
+            raise ValueError(f'Shared string counts must be less than or equal to {0x7fffffff}: {value}')
+    
+    @staticmethod
+    def read(stream, for_update=False):
         rprocessor = RecordProcessor.resolve(stream)
+        repository = RecordRepository(for_update)
         
         r = rprocessor.read_descriptor()
         if r.rtype != BinaryRecordType.BrtBeginSst:
             raise UnexpectedRecordException(r, BinaryRecordType.BrtBeginSst)
         
-        items = []
-        while True:
-            r = rprocessor.read_descriptor()
-            if r.rtype == BinaryRecordType.BrtSSTItem:
-                items.append(RichStr.read(rprocessor))
-            elif r.rtype == BinaryRecordType.BrtEndSst:
-                break
-            else:
-                raise UnexpectedRecordException(r, BinaryRecordType.BrtSSTItem, BinaryRecordType.BrtEndSst)
+        cst_total = struct.unpack('<I', rprocessor.read(4))
+        cst_unique = struct.unpack('<I', rprocessor.read(4))
+        SharedStringsPart.validate_str_count(cst_unique)
         
-        return SharedStringsPart(items)
+        items = []
+        for i in range(cst_unique):
+            r = rprocessor.read_descriptor()
+            if r.rtype != BinaryRecordType.BrtSSTItem:
+                raise UnexpectedRecordException(r, BinaryRecordType.BrtSSTItem)
+            items.append(RichStr.read(rprocessor))
+        
+        rprocessor.skip_until(BinaryRecordType.BrtEndSst, repository=repository)
+        
+        return SharedStringsPart(cst_total, items, repository=repository)
     
     
-    def __init__(self, items):
+    def __init__(self, referencce_count, items, *, repository):
+        SharedStringsPart.validate_str_count(referencce_count)
+        SharedStringsPart.validate_str_count(len(items))
+        
+        self.referencce_count = referencce_count
         self.items = items
     
 

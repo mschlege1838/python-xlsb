@@ -89,6 +89,10 @@ class WorksheetPart:
                 r = rprocessor.skip_until(BinaryRecordType.BrtACEnd, repository=repository, skip_last=True)
             repository.push_current()
             
+            if r.rtype == BinaryRecordType.BrtEndSheetData:
+                rows_done = True
+                break
+            
             if r.rtype != BinaryRecordType.BrtRowHdr:
                 raise UnexpectedRecordException(r, BinaryRecordType.BrtRowHdr)
             row_header = RowHeader.read(rprocessor)

@@ -22,7 +22,7 @@ class SharedStringsPart:
         if r.rtype != BinaryRecordType.BrtBeginSst:
             raise UnexpectedRecordException(r, BinaryRecordType.BrtBeginSst)
         
-        cst_total, cst_unique = struct.unpack('<I', rprocessor.read(8))
+        cst_total, cst_unique = struct.unpack('<II', rprocessor.read(8))
         SharedStringsPart.validate_str_count(cst_unique)
         
         items = []
@@ -112,7 +112,7 @@ class RichStr:
 class StrRun:
     @staticmethod
     def read(stream):
-        ich, ifnt = struct.unpack('<H', stream.read(4))
+        ich, ifnt = struct.unpack('<HH', stream.read(4))
         return StrRun(ich, ifnt)
     
     def __init__(self, start_index, font_index):
@@ -135,7 +135,7 @@ class AlignmentType(Enum):
 class PhoneticRun:
     @staticmethod
     def read(stream):
-        ich_first, ich_mom, cch_mom, i_fnt, flags = struct.unpack('<H', stream.read(10))
+        ich_first, ich_mom, cch_mom, i_fnt, flags = struct.unpack('<HHHHH', stream.read(10))
         ph_type = flags & 0x03
         alc_h = flags & 0x0c >> 2
         unused_1 = flags & 0xfff0

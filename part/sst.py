@@ -47,7 +47,7 @@ class SharedStringsPart:
 
 class RichStr:
     @staticmethod
-    def validate_str_run(value):
+    def validate_str_run_count(value):
         if value > 0x7fff:
             raise ValueError(f'String run count must be less than or equal to {0x7fff}: {value}')
     
@@ -65,7 +65,7 @@ class RichStr:
         rgs_str_run = None
         if f_rich_str:
             dw_size_str_run = struct.unpack('<I', rprocessor.read(4))[0]
-            SharedStringsPart.validate_str_run(dw_size_str_run)
+            SharedStringsPart.validate_str_run_count(dw_size_str_run)
             
             rgs_str_run = []
             prev = None
@@ -87,7 +87,7 @@ class RichStr:
             phonetic_str = rprocessor.read_xl_w_string(False)
             
             dw_phonetic_run = struct.unpack('<I', rprocessor.read(4))[0]
-            SharedStringsPart.validate_str_run(dw_phonetic_run)
+            SharedStringsPart.validate_str_run_count(dw_phonetic_run)
             
             rgs_ph_run = []
             prev = None
@@ -100,9 +100,14 @@ class RichStr:
                     raise ValueError(f'Each phonetic string run must have a start index greater than the previous: {run.ph_start_index}'
                                         f'; Prev={previous.ph_start_index}; Run Index={i}')
         
-        return RichStr
+        return RichStr(_str, rgs_str_run, phonetic_str, rgs_ph_run)
     
     def __init__(self, val, runs=None, phonetic_val=None, phonetic_runs=None):
+        if runs:
+            SharedStringsPart.validate_str_run_count(len(runs))
+        if phonetic_runs:
+            SharedStringsPart.validate_str_run_count(len(phonetic_runs))
+        
         self.val = val
         self.runs = runs
         self.phonetic_val = phonetic_val

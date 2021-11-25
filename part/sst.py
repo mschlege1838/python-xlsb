@@ -37,11 +37,11 @@ class SharedStringsPart:
         return SharedStringsPart(cst_total, items, repository=repository)
     
     
-    def __init__(self, referencce_count, items, *, repository):
-        SharedStringsPart.validate_str_count(referencce_count)
+    def __init__(self, reference_count, items, *, repository):
+        SharedStringsPart.validate_str_count(reference_count)
         SharedStringsPart.validate_str_count(len(items))
         
-        self.referencce_count = referencce_count
+        self.reference_count = reference_count
         self.items = items
     
 

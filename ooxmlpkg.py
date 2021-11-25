@@ -61,7 +61,7 @@ class PartInfo:
         return None
     
     def __str__(self):
-        return f'{self.path} ({self.content_type})
+        return f'{self.path} ({self.content_type})'
 
 class PartRelationship:
     

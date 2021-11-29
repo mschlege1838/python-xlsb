@@ -4,7 +4,7 @@ from enum import Enum
 
 import btypes
 from btypes import BinaryRecordType
-from bprocessor import UnexpectedRecordException, RecordProcessor, RecordRepository
+from bprocessor import UnexpectedRecordException, RecordProcessor, RecordRepository, RecordDescriptor
 
 
 class SharedStringsPart:
@@ -33,6 +33,7 @@ class SharedStringsPart:
             items.append(RichStr.read(rprocessor))
         
         rprocessor.skip_until(BinaryRecordType.BrtEndSst, repository=repository)
+        repository.push_current()
         
         return SharedStringsPart(cst_total, items, repository=repository)
     
@@ -43,6 +44,24 @@ class SharedStringsPart:
         
         self.reference_count = reference_count
         self.items = items
+        self.repository = repository
+    
+    def write(self, stream):
+        rprocessor = RecordProcessor.resolve(stream)
+        items = self.items
+        
+        RecordDescriptor(BinaryRecordType.BrtBeginSst, 8).write(rprocessor)
+        rprocessor.write(struct.pack('<I', self.reference_count))
+        rprocessor.write(struct.pack('<I', len(items)))
+        
+        for item in items:
+            RecordDescriptor(BinaryRecordType.BrtSSTItem, len(item)).write(rprocessor)
+            item.write(rprocessor)
+        
+        if self.repository:
+            self.repository.write_poll(rprocessor)
+        
+        RecordDescriptor(BinaryRecordType.BrtEndSst).write(rprocessor)
     
 
 class RichStr:
@@ -113,6 +132,44 @@ class RichStr:
         self.phonetic_val = phonetic_val
         self.phonetic_runs = phonetic_runs
     
+    def write(self, stream):
+        rprocessor = RecordProcessor.resolve(stream)
+        phonetic_val = self.phonetic_val
+        
+        flags = 0
+        if self.runs:
+            flags |= 0x01
+        if self.phonetic_val:
+            flags |= 0x02
+        rprocessor.write(flags)
+        
+        rprocessor.write_xl_w_string(self.val, False)
+        
+        runs = self.runs
+        if runs:
+            RichStr.validate_str_run_count(len(runs))
+            rprocessor.write(struct.pack('<I', len(runs)))
+            for run in runs:
+                run.write(rprocessor)
+        
+        if phonetic_val:
+            rprocessor.write_xl_w_string(phonetic_val, False)
+            
+            phonetic_runs = self.phonetic_runs
+            RichStr.validate_str_run_count(len(phonetic_runs))
+            rprocessor.write(struct.pack('<I', len(phonetic_runs)))
+            for run in phonetic_runs:
+                run.write(rprocessor)
+    
+    def __len__(self):
+        result = 1 + 2 * len(self.val) + 4 + (sum(len(v) for v in self.runs) if self.runs else 0)
+        phonetic_val = self.phonetic_val
+        if phonetic_val:
+            return result + 2 * len(phonetic_val) + 4 + (sum(len(v) for v in self.phonetic_runs) if self.phonetic_runs else 0)
+        else:
+            return result
+    
+    
 
 class StrRun:
     @staticmethod
@@ -123,6 +180,13 @@ class StrRun:
     def __init__(self, start_index, font_index):
         self.start_index = start_index
         self.font_index = font_index
+    
+    def write(self, stream):
+        stream.write(struct.pack('<H', self.start_index))
+        stream.write(struct.pack('<H', self.font_index))
+    
+    def __len__(self):
+        return 4
 
 
 class KatakanaType(Enum):
@@ -142,7 +206,7 @@ class PhoneticRun:
     def read(stream):
         ich_first, ich_mom, cch_mom, i_fnt, flags = struct.unpack('<HHHHH', stream.read(10))
         ph_type = flags & 0x03
-        alc_h = flags & 0x0c >> 2
+        alc_h = (flags & 0x0c) >> 2
         unused_1 = flags & 0xfff0
         return PhoneticRun(ich_first, ich_mom, cch_mom, i_fnt, KatakanaType(ph_type), AlignmentType(alc_h))
 
@@ -153,5 +217,20 @@ class PhoneticRun:
         self.font_index = font_index
         self.katakana_type = katakana_type
         self.alignment_type = alignment_type
+    
+    def write(self, stream):
+        rprocessor = RecordProcessor.resolve(stream)
         
+        rprocessor.write(struct.pack('<H', self.ph_start_index))
+        rprocessor.write(struct.pack('<H', self.str_start_index))
+        rprocessor.write(struct.pack('<H', self.str_count))
+        rprocessor.write(struct.pack('<H', self.font_index))
+        
+        flags = 0
+        flags |= self.katakana_type.value
+        flags |= (self.alignment_type.value << 2)
+        rprocessor.write(flags)
+    
+    def __len__(self):
+        return 10
         

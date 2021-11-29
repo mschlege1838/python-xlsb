@@ -45,6 +45,7 @@ class WorkbookPart:
     
     def write(self, stream):
         repository = self.repository
+        repository.begin_write()
         rprocessor = RecordProcessor.resolve(stream)
         
         # Begin
@@ -65,7 +66,8 @@ class WorkbookPart:
         
         # End
         RecordDescriptor(BinaryRecordType.BrtEndBook).write(rprocessor)
-    
+        repository.close()
+        
     def __len__(self):
         result = len(self.repository)
         for sheet_ref in self.sheet_refs:

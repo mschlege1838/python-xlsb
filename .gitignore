@@ -1,2 +1,6 @@
 *.bin
 __pycache__
+*.html
+*.bin_
+*.xlsb
+test.py

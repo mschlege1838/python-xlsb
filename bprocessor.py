@@ -25,7 +25,18 @@ class UnexpectedRecordSizeException(Exception):
 
 # Types
 class RecordDescriptor:
-
+    
+    @staticmethod
+    def iter_parts(stream):
+        rprocessor = RecordProcessor.resolve(stream)
+        try:
+            while True:
+                r = rprocessor.read_descriptor()
+                yield r
+                r.skip(rprocessor)
+        except UnexpectedEOFException:
+            pass
+    
     def __init__(self, rtype, size=0):
         self.rtype = rtype
         self.size = size
@@ -42,12 +53,14 @@ class RecordDescriptor:
             rprocessor.write((d[1] << 1) | ((d[0] & 0x80) >> 7))
         
         dsize = struct.pack('<I', self.size)
-        for i in range(3):
-            has_next = dsize[i + 1] != 0 or (dsize[i] & 0x80)
+        count = 0
+        for i, val in enumerate(dsize):
+            if val != 0:
+                count = i
+        
+        for i in range(count + 1):
             o = dsize[i] if i == 0 else ((dsize[i] << 1) | ((dsize[i - 1] & 0x80) >> 7))
-            rprocessor.write((0x80 | o) if has_next else (o & 0x7f))
-            if not has_next:
-                break
+            rprocessor.write((0x80 | o) if i < count - 1 else (o & 0x7f))
     
     def skip(self, target, repository=None):
         if repository and repository.for_update:
@@ -228,7 +241,8 @@ class RecordCopy:
     
     def write_to(self, stream):
         self.descriptor.write(stream)
-        stream.write(self.data_file)
+        if self.data_len:
+            stream.write(self.data_file.read(self.data_len))
     
     def __len__(self):
         return self.data_len
@@ -239,17 +253,14 @@ class RecordRepository:
         if for_update:
             self.queue = deque()
             self.current = []
+            self.f = TemporaryFile()
     
     def store(self, descriptor, data):
         if not self.for_update:
             return
+        f = self.f
         if data:
-            f = TemporaryFile()
             f.write(data)
-            f.seek(0)
-        else:
-            f = None
-        
         self.current.append(RecordCopy(descriptor, len(data), f))
     
     def push_current(self):
@@ -258,16 +269,21 @@ class RecordRepository:
         self.queue.append(self.current)
         self.current = []
     
-    def write_poll(self, target):
+    def begin_write(self):
+        if not self.for_update:
+            return
+        self.f.seek(0)
+    
+    def write_poll(self, stream):
         if not self.for_update:
             return
         for item in self.queue.popleft():
-            item.descriptor.write(target)
-            
-            data_file = item.data_file
-            if data_file:
-                target.write(data_file.read())
-                data_file.close()
+            item.write_to(stream)
+    
+    def close(self):    
+        if not self.for_update:
+            return
+        self.f.close()
     
     def __len__(self):
         if not self.for_update:

@@ -13,7 +13,7 @@ from collections import deque
 from btypes import RelationshipType, ContentType, XMLNSName
 
 
-def norm_path(path, return_segs=False, return_path=True):
+def norm_path(path, return_segs=False, return_path=True, leading_slash=True):
     if not path:
         path = ''
     elif isinstance(path, PartRelationship):
@@ -30,10 +30,16 @@ def norm_path(path, return_segs=False, return_path=True):
                 psegs.pop()
         else:
             psegs.append(seg)
+    
+    if return_segs and not return_path:
+        return psegs
+    
+    path = f"/{'/'.join(psegs)}" if leading_slash else '/'.join(psegs)
+    
     if return_path and return_segs:
-        return '/'.join(psegs), psegs
+        return path, psegs
     else:
-        return psegs if return_segs else '/'.join(psegs)
+        return path
 
 
 class PartInfo:
@@ -95,7 +101,7 @@ class ZipOfficeOpenXMLPackage:
     def get_part_info(self, path=None):
         path, psegs = norm_path(path, True, True)
         
-        if not path:
+        if path == '/':
             try:
                 return PartInfo('/', None, PartRelationship.from_xml('', self.open_part('_rels/.rels')))
             except FileNotFoundError:
@@ -105,7 +111,7 @@ class ZipOfficeOpenXMLPackage:
                 return None
             
             content_type = self.determine_content_type(path)
-            root = '/'.join(list(psegs)[:-1])
+            root = f"/{'/'.join(list(psegs)[:-1])}"
             
             psegs.insert(-1, '_rels')
             psegs[-1] = f'{psegs[-1]}.rels'
@@ -114,7 +120,7 @@ class ZipOfficeOpenXMLPackage:
             try:
                 return PartInfo(path, content_type, PartRelationship.from_xml(root, self.open_part(rel_path)))
             except FileNotFoundError:
-                return PartInfo(part, content_type, [])
+                return PartInfo(path, content_type, [])
     
     def determine_content_type(self, path):
         path = norm_path(path.casefold())
@@ -146,7 +152,7 @@ class ZipOfficeOpenXMLPackage:
     
     
     def exists(self, path):
-        path = norm_path(path)
+        path = norm_path(path, leading_slash=False)
         
         if self.extract_dir:
             try:
@@ -163,7 +169,7 @@ class ZipOfficeOpenXMLPackage:
                 return False
     
     def open_part(self, path, mode='r'):
-        path = norm_path(path)
+        path = norm_path(path, leading_slash=False)
         
         if self.extract_dir:
             return open(os.path.join(self.extract_dir, path.replace('/', os.sep)), mode)

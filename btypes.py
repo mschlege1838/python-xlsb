@@ -13,6 +13,7 @@ class RelationshipType(Enum):
     WORKSHEET = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'
     SHARED_STRINGS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings'
     CALCULATION_CHAIN = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain'
+    STYLES = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles'
     
     @staticmethod
     def resolve(value):
@@ -38,6 +39,7 @@ class ContentType(Enum):
     RELS = 'application/vnd.openxmlformats-package.relationships+xml'
     WORKSHEET = 'application/vnd.ms-excel.worksheet'
     CALCULATION_CHAIN = 'application/vnd.ms-excel.calcChain'
+    STYLES = 'application/vnd.ms-excel.styles'
     
     @staticmethod
     def resolve(value):

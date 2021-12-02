@@ -32,8 +32,7 @@ class RecordDescriptor:
         try:
             while True:
                 r = rprocessor.read_descriptor()
-                yield r
-                r.skip(rprocessor)
+                yield r, stream.read(r.size)
         except UnexpectedEOFException:
             pass
     
@@ -64,7 +63,9 @@ class RecordDescriptor:
     
     def skip(self, target, repository=None):
         if repository and repository.for_update:
-            repository.store(self, target.read(self.size, single_as_int=False))
+            data = target.read(self.size, single_as_int=False)
+            # print(self, data)
+            repository.store(self, data)
         else:
             target.seek(self.size, io.SEEK_CUR)
 
@@ -152,8 +153,7 @@ class RecordProcessor:
                 elif state == RecordReadState.ALT_CONTENT:
                     rtype = AlternateContentRecordType(rtype_num)
                 else:
-                    raise ValueError(state)
-        
+                    raise ValueError(rtype_num)
         
         # Evaluate State
         if rtype == BinaryRecordType.BrtFRTBegin:
@@ -164,7 +164,6 @@ class RecordProcessor:
             if not len(stack):
                 raise UnexpectedRecordException(rtype, f'NOT ({BinaryRecordType.BrtFRTEnd}, {BinaryRecordType.BrtACEnd})')
             stack.pop()
-        
         
         # Determine Size
         size = 0

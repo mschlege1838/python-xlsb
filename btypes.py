@@ -941,3 +941,186 @@ class FutureRecordType(ExtendedRecordType):
 class AlternateContentRecordType(ExtendedRecordType):
     def __init__(self, tnumber):
         super().__init__('AlternateContent', tnumber)
+
+
+
+class HorizontalAlignmentType(Enum):
+    GENERAL = 0
+    LEFT = 1
+    CENTER = 2
+    RIGHT = 3
+    FILL = 4
+    JUSTIFY = 5
+    CENTER_ACROSS_SELECTION = 6
+    DISTRIBUTED = 7
+
+class VerticalAlignmentType(Enum):
+    TOP = 0
+    CENTER = 1
+    BOTTOM = 2
+    JUSTIFY = 3
+    DISTRIBUTED = 4
+
+class ReadingOrderType(Enum):
+    CONTEXT_DEPENDENT = 0
+    LEFT_TO_RIGHT = 1
+    RIGHT_TO_LEFT = 2
+
+class XFProperty(Enum):
+    FMT = 0x0001
+    FONT = 0x02
+    ALIGNMENT = 0x0004
+    BORDER = 0x0008
+    FILL = 0x0010
+    PROTECTION = 0x0020
+
+class ColorType(Enum):
+    AUTO = 0x00
+    INDEX = 0x01
+    ARGB = 0x02
+    THEME = 0x03
+
+class IndexedColor(Enum):
+    icvBlack = 0x00         # 0x000000FF
+    icvWhite = 0x01         # 0xFFFFFFFF
+    icvRed = 0x02           # 0xFF0000FF
+    icvGreen = 0x03         # 0x00FF00FF
+    icvBlue = 0x04          # 0x0000FFFF
+    icvYellow = 0x05        # 0xFFFF00FF
+    icvMagenta = 0x06       # 0xFF00FFFF
+    icvCyan = 0x07          # 0x00FFFFFF
+    icvPlt1 = 0x08          # 0x000000FF
+    icvPlt2 = 0x09          # 0xFFFFFFFF
+    icvPlt3 = 0x0A          # 0xFF0000FF
+    icvPlt4 = 0x0B          # 0x00FF00FF
+    icvPlt5 = 0x0C          # 0x0000FFFF
+    icvPlt6 = 0x0D          # 0xFFFF00FF
+    icvPlt7 = 0x0E          # 0xFF00FFFF
+    icvPlt8 = 0x0F          # 0x00FFFFFF
+    icvPlt9 = 0x10          # 0x800000FF
+    icvPlt10 = 0x11         # 0x008000FF
+    icvPlt11 = 0x12         # 0x000080FF
+    icvPlt12 = 0x13         # 0x808000FF
+    icvPlt13 = 0x14         # 0x800080FF
+    icvPlt14 = 0x15         # 0x008080FF
+    icvPlt15 = 0x16         # 0xC0C0C0FF
+    icvPlt16 = 0x17         # 0x808080FF
+    icvPlt17 = 0x18         # 0x9999FFFF
+    icvPlt18 = 0x19         # 0x993366FF
+    icvPlt19 = 0x1A         # 0xFFFFCCFF
+    icvPlt20 = 0x1B         # 0xCCFFFFFF
+    icvPlt21 = 0x1C         # 0x660066FF
+    icvPlt22 = 0x1D         # 0xFF8080FF
+    icvPlt23 = 0x1E         # 0x0066CCFF
+    icvPlt24 = 0x1F         # 0xCCCCFFFF
+    icvPlt25 = 0x20         # 0x000080FF
+    icvPlt26 = 0x21         # 0xFF00FFFF
+    icvPlt27 = 0x22         # 0xFFFF00FF
+    icvPlt28 = 0x23         # 0x00FFFFFF
+    icvPlt29 = 0x24         # 0x800080FF
+    icvPlt30 = 0x25         # 0x800000FF
+    icvPlt31 = 0x26         # 0x008080FF
+    icvPlt32 = 0x27         # 0x0000FFFF
+    icvPlt33 = 0x28         # 0x00CCFFFF
+    icvPlt34 = 0x29         # 0xCCFFFFFF
+    icvPlt35 = 0x2A         # 0xCCFFCCFF
+    icvPlt36 = 0x2B         # 0xFFFF99FF
+    icvPlt37 = 0x2C         # 0x99CCFFFF
+    icvPlt38 = 0x2D         # 0xFF99CCFF
+    icvPlt39 = 0x2E         # 0xCC99FFFF
+    icvPlt40 = 0x2F         # 0xFFCC99FF
+    icvPlt41 = 0x30         # 0x3366FFFF
+    icvPlt42 = 0x31         # 0x33CCCCFF
+    icvPlt43 = 0x32         # 0x99CC00FF
+    icvPlt44 = 0x33         # 0xFFCC00FF
+    icvPlt45 = 0x34         # 0xFF9900FF
+    icvPlt46 = 0x35         # 0xFF6600FF
+    icvPlt47 = 0x36         # 0x666699FF
+    icvPlt48 = 0x37         # 0x969696FF
+    icvPlt49 = 0x38         # 0x003366FF
+    icvPlt50 = 0x39         # 0x339966FF
+    icvPlt51 = 0x3A         # 0x003300FF
+    icvPlt52 = 0x3B         # 0x333300FF
+    icvPlt53 = 0x3C         # 0x993300FF
+    icvPlt54 = 0x3D         # 0x993366FF
+    icvPlt55 = 0x3E         # 0x333399FF
+    icvPlt56 = 0x3F         # 0x333333FF
+    icvForeground = 0x40    # System color for text in windows.
+    icvBackground = 0x41    # System color for window background.
+    icvFrame = 0x42         # System color for window frame.
+    icv3D = 0x43            # System-defined face color for three-dimensional display elements and for dialog box backgrounds.
+    icv3DText = 0x44        # System color for text on push buttons.
+    icv3DHilite = 0x45      # System highlight color for three-dimensional display elements (for edges facing the light source).
+    icv3DShadow = 0x46      # System shadow color for three-dimensional display elements (for edges facing away from the light source).
+    icvHilite = 0x47        # System color for items selected in a control.
+    icvCtlText = 0x48       # System color for text in windows.
+    icvCtlScrl = 0x49       # System color for scroll bar gray area.
+    icvCtlInv = 0x4A        # Bitwise inverse of the RGB value of icvCtlScrl.
+    icvCtlBody = 0x4B       # System color for window background.
+    icvCtlFrame = 0x4C      # System color for window frame.
+    icvCrtFore = 0x4D       # System color for text in windows.
+    icvCrtBack = 0x4E       # System color for window background.
+    icvCrtNeutral = 0x4F    # 0x000000FF
+    icvInfoBk = 0x50        # System background color for tooltip controls.
+    icvInfoText = 0x51      # System text color for tooltip controls.
+
+class ThemeColor(Enum):
+    DK_1 = 0x00
+    LT_1 = 0x01
+    DK_2 = 0x02
+    LT_2 = 0x03
+    ACCENT_1 = 0x04
+    ACCENT_2 = 0x05
+    ACCENT_3 = 0x06
+    ACCENT_4 = 0x07
+    ACCENT_5 = 0x08
+    ACCENT_6 = 0x09
+    HLINK = 0x0A
+    FOL_HLINK = 0x0B
+
+
+class SubscriptType(Enum):
+    NONE = 0x00
+    SUPERSCRIPT = 0x01
+    SUBSCRIPT = 0x02
+
+class UnderlineType(Enum):
+    NONE = 0x00
+    SINGLE = 0x01
+    DOUBLE = 0x02
+    ACCOUNTING_SINGLE = 0x21
+    ACCOUNTING_DOUBLE = 0x22
+
+class FontFamilyType(Enum):
+    NA = 0x00
+    ROMAN = 0x01
+    SWISS = 0x02
+    MODERN = 0x03
+    SCRIPT = 0x04
+    DECORATIVE = 0x05
+
+class CharacterSetType(Enum):
+    ANSI_CHARSET = 0x00
+    DEFAULT_CHARSET = 0x01
+    SYMBOL_CHARSET = 0x02
+    MAC_CHARSET = 0x4D
+    SHIFTJIS_CHARSET = 0x80
+    HANGUL_CHARSET = 0x81
+    JOHAB_CHARSET = 0x82
+    GB2312_CHARSET = 0x86
+    CHINESEBIG5_CHARSET = 0x88
+    GREEK_CHARSET = 0xA1
+    TURKISH_CHARSET = 0xA2
+    VIETNAMESE_CHARSET = 0xA3
+    HEBREW_CHARSET = 0xB1
+    ARABIC_CHARSET = 0xB2
+    BALTIC_CHARSET = 0xBA
+    RUSSIAN_CHARSET = 0xCC
+    THAI_CHARSET = 0xDE
+    EASTEUROPE_CHARSET = 0xEE
+    OEM_CHARSET = 0xFF
+
+class FontSchemeType(Enum):
+    NONE = 0x00
+    MAJOR = 0x01
+    MINOR = 0x02

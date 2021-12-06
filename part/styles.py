@@ -45,7 +45,13 @@ class StylesheetPart:
     @staticmethod
     def create_default():
         formats = []
-        fonts = FontList([Font()])
+        fonts = FontList([Font.create_default()])
+        fills = [Fill.create_default()]
+        borders = [Border.create_default()]
+        style_xfs = [CellXF.create_default_named()]
+        cell_xfs = [CellXF.create_default_inline()]
+        styles = [StyleInfo.create_default()]
+        return StylesheetPart(formats, fonts, fills, borders, style_xfs, cell_xfs, styles)
 
     @staticmethod
     def read(stream, for_update=False):
@@ -312,7 +318,7 @@ class Color:
         
         return Color(color_type, n_tint_and_shade, index, bool(f_valid_rgb), b_red, b_green, b_blue, b_alpha)
         
-    def __init__(self, color_type=ColorType.THEME, shade_amount=0, color_index=ThemeColor.LT_1, valid_argb=True, red=0, green=0, blue=0, alpha=255):
+    def __init__(self, color_type, shade_amount, color_index, valid_argb, red, green, blue, alpha):
         self.color_type = color_type
         self.shade_amount = shade_amount
         self.color_index = color_index
@@ -348,6 +354,16 @@ class Color:
 
 
 class CellXF:
+    @staticmethod
+    def create_default_named():
+        return CellXF(0xffff, 0, 0, 0, 0, 0, 0, HorizontalAlignmentType.GENERAL, VerticalAlignmentType.BOTTOM, False, False,
+                False, False, ReadingOrderType.CONTEXT_DEPENDENT, True, False, False, False, 0x0000)
+    
+    @staticmethod
+    def create_default_inline():
+        return CellXF(0, 0, 0, 0, 0, 0, 0, HorizontalAlignmentType.GENERAL, VerticalAlignmentType.BOTTOM, False, False,
+                False, False, ReadingOrderType.CONTEXT_DEPENDENT, True, False, False, False, 0x0000)
+    
     @staticmethod
     def read(stream, *, repository=None):
         ixfe_parent, i_font, i_fmt, i_fill, ix_border = struct.unpack('<HHHHH', stream.read(10))
@@ -470,7 +486,7 @@ class CellXF:
         return 16
 
     def __str__(self):
-        result = [f'XF: {"Named Style" if {self.is_style} else "Inline Style"}']
+        result = [f'XF: {"Named Style" if self.is_style else "Inline Style"}']
         result.append(f'    parent_index: {self.parent_index} ({hex(self.parent_index)})')
         result.append(f'    format_id: {self.format_id} (gr_bit flag: {self.gr_bit_val(XFProperty.FMT)})')
         result.append(f'    font_index: {self.font_index} (gr_bit flag: {self.gr_bit_val(XFProperty.FONT)})')
@@ -489,6 +505,7 @@ class CellXF:
         result.append(f'    hidden: {self.hidden} (gr_bit flag: {self.gr_bit_val(XFProperty.PROTECTION)})')
         result.append(f'    has_pivot_table_dropdown: {self.has_pivot_table_dropdown}')
         result.append(f'    single_quote_prefix: {self.single_quote_prefix}')
+        result.append(f'    (gr_bit): {hex(self.gr_bit)}')
         return '\n'.join(result)
 
 
@@ -532,8 +549,8 @@ class NumberFormat:
 
 
 class FontList:
-    def __init__(self, *, repository=None):
-        self.fonts = []
+    def __init__(self, fonts=None, *, repository=None):
+        self.fonts = [] if fonts is None else fonts
         self.repository = repository
     
     def append(self, font):
@@ -567,6 +584,12 @@ class FontList:
 
 class Font:
     @staticmethod
+    def create_default():
+        return Font(height=220, italic=False, strikeout=False, outline_only=False, shadow=False, condense=False, extend=False, weight=400,
+            subscript_type=SubscriptType.NONE, underline_type=UnderlineType.NONE, family=FontFamilyType.SWISS, char_set_type=CharacterSetType.ANSI_CHARSET,
+            color=Color(ColorType.THEME, 0, ThemeColor.LT_1, True, 0, 0, 0, 255), font_scheme=FontSchemeType.MINOR, name='Calibri')
+    
+    @staticmethod
     def read(stream):
         rprocessor = RecordProcessor.resolve(stream)
         
@@ -594,9 +617,8 @@ class Font:
                 bool(f_extend), bls, SubscriptType(sss), UnderlineType(uls), FontFamilyType(b_family), CharacterSetType(b_char_set),
                 brt_color, FontSchemeType(b_font_scheme), name)
     
-    def __init__(self, height=220, italic=False, strikeout=False, outline_only=False, shadow=False, condense=False, extend=False, weight=400,
-            subscript_type=SubscriptType.NONE, underline_type=UnderlineType.NONE, family=FontFamilyType.SWISS, char_set_type=CharacterSetType.ANSI_CHARSET,
-            color=Color(), font_scheme=FontSchemeType.MINOR, name='Calibri'):
+    def __init__(self, height, italic, strikeout, outline_only, shadow, condense, extend, weight, subscript_type, underline_type, family, 
+            char_set_type, color, font_scheme, name):
         self.height = height
         self.italic = italic
         self.strikeout = strikeout
@@ -662,6 +684,10 @@ class Font:
 
 class StyleInfo:
     @staticmethod
+    def create_default():
+        return StyleInfo(None, 0, True, False, False, 0, 0, 'Normal')
+
+    @staticmethod
     def read(stream, acuid, *, repository=None):
         rprocessor = RecordProcessor.resolve(stream)
         
@@ -686,7 +712,7 @@ class StyleInfo:
         self.built_in_level = built_in_level
         self.name = name
         self.repository = repository
-    IndexedColor
+    
     def write(self, stream):
         rprocessor = RecordProcessor.resolve(stream)
         
@@ -716,8 +742,24 @@ class StyleInfo:
     
     def __len__(self):
         return 8 + RecordProcessor.len_xl_w_string(self.name)
+    
+    def __str__(self):
+        result = [f'Style Info: {self.name}']
+        result.append(f'    xf_index: {self.xf_index}')
+        result.append(f'    built_in: {self.built_in}')
+        result.append(f'    hidden: {self.hidden}')
+        result.append(f'    built_in_customized: {self.built_in_customized}')
+        result.append(f'    built_in_style_id: {self.built_in_style_id}')
+        result.append(f'    built_in_level: {self.built_in_level}')
+        return '\n'.join(result)
 
 class Fill:
+    @staticmethod
+    def create_default():
+        return Fill(fill_type=FillType.NONE, foreground_color=Color(ColorType.INDEX, 0, IndexedColor.icvForeground, True, 0, 0, 0, 255), 
+            background_color=Color(ColorType.INDEX, 0, IndexedColor.icvBackground, True, 255, 255, 255, 255), gradient_type=GradientType.LINEAR, gradient_angle=0.0,
+            gradient_fill_left=0.0, gradient_fill_right=0.0, gradient_fill_top=0.0, gradient_fill_bottom=0.0, gradient_stops=[])
+    
     @staticmethod
     def read(stream):
         fls = struct.unpack('<I', stream.read(4))[0]
@@ -736,7 +778,7 @@ class Fill:
         return Fill(FillType(fls), brt_color_fore, brt_color_back, GradientType(i_gradient_type), xnum_degree, xnum_fill_to_left, xnum_fill_to_right,
                 xnum_fill_to_top, xnum_fill_to_bottom, xfill_gradient_stops)
     
-    def __init__(self, fill_type, foreground_color, background_color, gradient_type, gradient_angle, gradient_fill_left, gradient_fill_right,
+    def __init__(self, fill_type, foreground_color, background_color, gradient_type, gradient_angle, gradient_fill_left, gradient_fill_right, 
             gradient_fill_top, gradient_fill_bottom, gradient_stops):
         self.fill_type = fill_type
         self.foreground_color = foreground_color
@@ -765,6 +807,19 @@ class Fill:
     
     def __len__(self):
         return 4 + len(self.foreground_color) + len(self.background_color) + 48 + sum(len(i) for i in self.gradient_stops)
+    
+    def __str__(self):
+        result = [f'Fill: {self.fill_type}']
+        result.append(f'    foreground_color: {self.foreground_color}')
+        result.append(f'    background_color: {self.background_color}')
+        result.append(f'    gradient_type: {self.gradient_type}')
+        result.append(f'    gradient_angle: {self.gradient_angle}')
+        result.append(f'    gradient_fill_left: {self.gradient_fill_left}')
+        result.append(f'    gradient_fill_right: {self.gradient_fill_right}')
+        result.append(f'    gradient_fill_top: {self.gradient_fill_top}')
+        result.append(f'    gradient_fill_bottom: {self.gradient_fill_bottom}')
+        result.append(f'    gradient_stops: {", ".join(self.gradient_stops)}')
+        return '\n'.join(result)
 
 class GradientStop:
     @staticmethod
@@ -783,9 +838,38 @@ class GradientStop:
     
     def __len__(self):
         return len(self.color) + 8
+    
+    def __str__(self):
+        return f'(color: {self.color}, position: {self.position}'
 
+class BorderDefinition:
+    @staticmethod
+    def read(stream):
+        dg, reserved = stream.read(2)
+        brt_color = Color.read(stream)
+        
+        return BorderDefinition(BorderType(dg), brt_color)
+    
+    def __init__(self, border_type, color):
+        self.border_type = border_type
+        self.color = color
+    
+    def write(self, stream):
+        stream.write(bytes((self.border_type.value, 0)))
+        self.color.write(stream)
+    
+    def __str__(self):
+        return f'(border_type: {self.border_type}, color: {self.color})'
 
 class Border:
+    @staticmethod
+    def create_default():
+        return Border(has_diagonal_down=False, has_diagonal_up=False, top=BorderDefinition(BorderType.NONE, Color(ColorType.AUTO, 0, 0, True, 0, 0, 0, 0)), 
+            bottom=BorderDefinition(BorderType.NONE, Color(ColorType.AUTO, 0, 0, True, 0, 0, 0, 0)),
+            left=BorderDefinition(BorderType.NONE, Color(ColorType.AUTO, 0, 0, True, 0, 0, 0, 0)),
+            right=BorderDefinition(BorderType.NONE, Color(ColorType.AUTO, 0, 0, True, 0, 0, 0, 0)),
+            diagonal=BorderDefinition(BorderType.NONE, Color(ColorType.AUTO, 0, 0, True, 0, 0, 0, 0)))
+    
     @staticmethod
     def read(stream):
         rprocessor = RecordProcessor.resolve(stream)
@@ -832,20 +916,16 @@ class Border:
     
     def __len__(self):
         return 51
+    
+    def __str__(self):
+        result = ['Border:']
+        result.append(f'    has_diagonal_down: {self.has_diagonal_down}')
+        result.append(f'    has_diagonal_up: {self.has_diagonal_up}')
+        result.append(f'    top: {self.top}')
+        result.append(f'    bottom: {self.bottom}')
+        result.append(f'    left: {self.left}')
+        result.append(f'    right: {self.right}')
+        result.append(f'    diagonal: {self.diagonal}')
+        return '\n'.join(result)
 
 
-class BorderDefinition:
-    @staticmethod
-    def read(stream):
-        dg, reserved = stream.read(2)
-        brt_color = Color.read(stream)
-        
-        return BorderDefinition(BorderType(dg), brt_color)
-    
-    def __init__(self, border_type, color):
-        self.border_type = border_type
-        self.color = color
-    
-    def write(self, stream):
-        stream.write(bytes((self.border_type.value, 0)))
-        self.color.write(stream)

@@ -968,7 +968,7 @@ class ReadingOrderType(Enum):
 
 class XFProperty(Enum):
     FMT = 0x0001
-    FONT = 0x02
+    FONT = 0x0002
     ALIGNMENT = 0x0004
     BORDER = 0x0008
     FILL = 0x0010
@@ -1124,3 +1124,46 @@ class FontSchemeType(Enum):
     NONE = 0x00
     MAJOR = 0x01
     MINOR = 0x02
+
+
+class FillType(Enum):
+    NONE = 0x00
+    SOLID = 0x01
+    MEDIUM_GRAY = 0x02
+    DARK_GRAY = 0x03
+    LIGHT_GRAY = 0x04
+    HORIZONTAL_STRIPES = 0x05
+    VERTICAL_STRIPES = 0x06
+    DOWNWARD_DIAGONAL_STRIPES = 0x07
+    UPWARD_DIAGONAL_STRIPES = 0x08
+    GRID = 0x09
+    TRELLIS = 0x0a
+    LIGHT_HORIZONTAL_STRIPES = 0x0b
+    LIGHT_VERTICAL_STRIPES = 0x0c
+    LIGHT_DOWNWARD_DIAGONAL_STRIPES = 0x0d
+    LIGHT_UPWARD_DIAGONAL_STRIPES = 0x0e
+    LIGHT_GRID = 0x0f
+    LIGHT_TRELLIS = 0x10
+    GRAYSCALE = 0x11
+    LIGHT_GRAYSCALE = 0x12
+    GRADIENT = 0x28
+
+class GradientType(Enum):
+    LINEAR = 0x00
+    RECTANGULAR = 0x01
+
+class BorderType(Enum):
+    NONE = 0x00
+    THIN = 0x01
+    MEDIUM = 0x02
+    DASHED = 0x03
+    DOTTED = 0x04
+    THICK = 0x05
+    DOUBLE = 0x06
+    HAIRLINE = 0x07
+    MEDIUM_DASHED = 0x08
+    DASH_DOT = 0x09
+    MEDIUM_DASH_DOT = 0x0a
+    DASH_DOT_DOT = 0x0b
+    MEDIUM_DASH_DOT_DOT = 0x0c
+    SLANT_DASH_DOT = 0x0d

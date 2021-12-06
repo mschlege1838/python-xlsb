@@ -3,7 +3,8 @@
 import struct
 
 from btypes import BinaryRecordType, HorizontalAlignmentType, VerticalAlignmentType, ReadingOrderType, XFProperty, ColorType, \
-        IndexedColor, ThemeColor, SubscriptType, UnderlineType, FontFamilyType, CharacterSetType, FontSchemeType
+        IndexedColor, ThemeColor, SubscriptType, UnderlineType, FontFamilyType, CharacterSetType, FontSchemeType, FillType, GradientType, \
+        BorderType
 from bprocessor import UnexpectedRecordException, RecordProcessor, RecordRepository, RecordDescriptor
 from part import ACUid
 
@@ -42,6 +43,11 @@ num_format_lu_all_langs = {
 
 class StylesheetPart:
     @staticmethod
+    def create_default():
+        formats = []
+        fonts = FontList([Font()])
+
+    @staticmethod
     def read(stream, for_update=False):
         rprocessor = RecordProcessor.resolve(stream)
         repository = RecordRepository(for_update)
@@ -79,9 +85,9 @@ class StylesheetPart:
             
             if r.rtype != BinaryRecordType.BrtEndFmts:
                 raise UnexpectedRecordException(r, BinaryRecordType.BrtEndFmts)
+            r = rprocessor.read_descriptor()
         
         # Fonts
-        r = rprocessor.read_descriptor()
         if r.rtype == BinaryRecordType.BrtBeginFonts:
             fonts = FontList(repository=repository)
             cfonts = struct.unpack('<I', rprocessor.read(4))[0]
@@ -101,13 +107,41 @@ class StylesheetPart:
             
             if r.rtype != BinaryRecordType.BrtEndFonts:
                 raise UnexpectedRecordException(r, BinaryRecordType.BrtEndFonts)
+            r = rprocessor.read_descriptor()
         else:
             fonts = FontList()
         
+        # Fills
+        fills = []
+        if r.rtype == BinaryRecordType.BrtBeginFills:
+            cfills = struct.unpack('<I', rprocessor.read(4))[0]
+            for i in range(cfills):
+                r = rprocessor.read_descriptor()
+                if r.rtype != BinaryRecordType.BrtFill:
+                    raise UnexpectedRecordException(r, BinaryRecordType.BrtFill)
+                fills.append(Fill.read(rprocessor))
+            
+            r = rprocessor.read_descriptor()
+            if r.rtype != BinaryRecordType.BrtEndFills:
+                raise UnexpectedRecordException(r, BinaryRecordType.BrtEndFills)
+            r = rprocessor.read_descriptor()
         
-        # Skip4
-        r = rprocessor.skip_until(BinaryRecordType.BrtBeginCellStyleXFs, repository=repository)
-        repository.push_current()
+        
+        # Borders
+        borders = []
+        if r.rtype == BinaryRecordType.BrtBeginBorders:
+            cborders = struct.unpack('<I', rprocessor.read(4))[0]
+            for i in range(cborders):
+                r = rprocessor.read_descriptor()
+                if r.rtype != BinaryRecordType.BrtBorder:
+                    raise UnexpectedRecordException(r, BinaryRecordType.BrtBorder)
+                borders.append(Border.read(rprocessor))
+            
+            r = rprocessor.read_descriptor()
+            if r.rtype != BinaryRecordType.BrtEndBorders:
+                raise UnexpectedRecordException(r, BinaryRecordType.BrtEndBorders)
+            r = rprocessor.read_descriptor()
+        
         
         # Cell Style XFs
         if r.rtype != BinaryRecordType.BrtBeginCellStyleXFs:
@@ -184,12 +218,14 @@ class StylesheetPart:
         r = rprocessor.skip_until(BinaryRecordType.BrtEndStyleSheet, repository=repository)
         repository.push_current()
         
-        return StylesheetPart(formats, fonts, style_xfs, cell_xfs, styles, repository=repository)
+        return StylesheetPart(formats, fonts, fills, borders, style_xfs, cell_xfs, styles, repository=repository)
         
     
-    def __init__(self, formats, fonts, style_xfs, cell_xfs, styles, *, repository=None):
+    def __init__(self, formats, fonts, fills, borders, style_xfs, cell_xfs, styles, *, repository=None):
         self.formats = formats
         self.fonts = fonts
+        self.fills = fills
+        self.borders = borders
         self.style_xfs = style_xfs
         self.cell_xfs = cell_xfs
         self.styles = styles
@@ -212,9 +248,21 @@ class StylesheetPart:
         
         self.fonts.write(rprocessor)
         
-        # Skip4
-        if repository:
-            repository.write_poll(rprocessor)
+        fills = self.fills
+        if len(fills):
+            RecordDescriptor(BinaryRecordType.BrtBeginFills, 4).write(rprocessor)
+            rprocessor.write(struct.pack('<I', len(fills)))
+            for fill in fills:
+                fill.write(rprocessor)
+            RecordDescriptor(BinaryRecordType.BrtEndFills).write(rprocessor)
+        
+        borders = self.borders
+        if len(borders):
+            RecordDescriptor(BinaryRecordType.BrtBeginBorders, 4).write(rprocessor)
+            rprocessor.write(struct.pack('<I', len(borders)))
+            for border in borders:
+                border.write(rprocessor)
+            RecordDescriptor(BinaryRecordType.BrtEndBorders).write(rprocessor)
         
         style_xfs = self.style_xfs
         RecordDescriptor(BinaryRecordType.BrtBeginCellStyleXFs, 4).write(rprocessor)
@@ -244,6 +292,60 @@ class StylesheetPart:
             repository.write_poll(rprocessor)
         
         RecordDescriptor(BinaryRecordType.BrtEndStyleSheet).write(rprocessor)
+
+
+class Color:
+    @staticmethod
+    def read(stream):
+        flags, index = stream.read(2)
+        f_valid_rgb = flags & 0x01
+        x_color_type = (flags & 0xfe) >> 1
+        
+        n_tint_and_shade = struct.unpack('<h', stream.read(2))[0]
+        b_red, b_green, b_blue, b_alpha = stream.read(4)
+        
+        color_type = ColorType(x_color_type)
+        if color_type == ColorType.INDEX:
+            index = IndexedColor(index)
+        elif color_type == ColorType.THEME:
+            index = ThemeColor(index)
+        
+        return Color(color_type, n_tint_and_shade, index, bool(f_valid_rgb), b_red, b_green, b_blue, b_alpha)
+        
+    def __init__(self, color_type=ColorType.THEME, shade_amount=0, color_index=ThemeColor.LT_1, valid_argb=True, red=0, green=0, blue=0, alpha=255):
+        self.color_type = color_type
+        self.shade_amount = shade_amount
+        self.color_index = color_index
+        self.valid_argb = valid_argb
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.alpha = alpha
+    
+    def write(self, stream, write_header=False):
+        rprocessor = RecordProcessor.resolve(stream)
+        
+        if write_header:
+            RecordDescriptor(BinaryRecordType.BrtColor, len(self)).write(rprocessor)
+        
+        color_type = self.color_type
+        if color_type == ColorType.ARGB or self.valid_argb:
+            rprocessor.write((color_type.value << 1) | 0x01)
+        else:
+            rprocessor.write(color_type.value << 1)
+        
+        color_index = self.color_index
+        rprocessor.write(color_index.value if isinstance(color_index, (IndexedColor, ThemeColor)) else color_index)
+        
+        rprocessor.write(struct.pack('<h', self.shade_amount))
+        rprocessor.write(bytes((self.red, self.green, self.blue, self.alpha)))
+    
+    def __str__(self):
+        return f'Color: {self.color_type}; i: {self.color_index}; ARGB (valid): {self.alpha}, {self.red}, {self.green}, {self.blue} ({self.valid_argb}); Shade: {self.shade_amount}'
+    
+    def __len__(self):
+        return 8
+
 
 class CellXF:
     @staticmethod
@@ -300,18 +402,14 @@ class CellXF:
     @property
     def is_style(self):
         return self.parent_index == 0xffff
-
     
     def should_ignore(self, xf_property):
-        return self.is_style and self.gr_bit & xf_property.value
+        return self.is_style and self.gr_bit_val(xf_property)
     
     def set_ignore(self, xf_property, ignore):
         if not self.is_style:
             raise ValueError('CellXF is a (normal) Cell XF.')
-        if ignore:
-            self.gr_bit |= xf_property.value
-        else:
-            self.gr_bit &= xf_property.value ^ 0xffff
+        self.set_gr_bit_val(ignore)
     
     def should_persist(self, xf_property):
         return not self.is_style and self.gr_bit & xf_property.value
@@ -319,7 +417,13 @@ class CellXF:
     def set_persist(self, xf_property, persist):
         if self.is_style:
             raise ValueError('CellXF is a Cell Style XF.')
-        if persist:
+        self.set_gr_bit_val(persist)
+    
+    def gr_bit_val(self, xf_property):
+        return bool(self.gr_bit & xf_property.value)
+    
+    def set_gr_bit_val(self, xf_property, value):
+        if value:
             self.gr_bit |= xf_property.value
         else:
             self.gr_bit &= xf_property.value ^ 0xffff
@@ -364,6 +468,29 @@ class CellXF:
     
     def __len__(self):
         return 16
+
+    def __str__(self):
+        result = [f'XF: {"Named Style" if {self.is_style} else "Inline Style"}']
+        result.append(f'    parent_index: {self.parent_index} ({hex(self.parent_index)})')
+        result.append(f'    format_id: {self.format_id} (gr_bit flag: {self.gr_bit_val(XFProperty.FMT)})')
+        result.append(f'    font_index: {self.font_index} (gr_bit flag: {self.gr_bit_val(XFProperty.FONT)})')
+        result.append(f'    fill_index: {self.fill_index} (gr_bit flag: {self.gr_bit_val(XFProperty.FILL)})')
+        result.append(f'    border_index: {self.border_index} (gr_bit flag: {self.gr_bit_val(XFProperty.BORDER)})')
+        result.append(f'    text_trot: {self.text_trot} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    indent: {self.indent} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    horizontal_align_type: {self.horizontal_align_type} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    vertical_align_type: {self.vertical_align_type} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    wrap_text: {self.wrap_text} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    justify_on_last_line: {self.justify_on_last_line} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    shrink_to_fit: {self.shrink_to_fit} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    merged: {self.merged} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    reading_order_type: {self.reading_order_type} (gr_bit flag: {self.gr_bit_val(XFProperty.ALIGNMENT)})')
+        result.append(f'    locked: {self.locked} (gr_bit flag: {self.gr_bit_val(XFProperty.PROTECTION)})')
+        result.append(f'    hidden: {self.hidden} (gr_bit flag: {self.gr_bit_val(XFProperty.PROTECTION)})')
+        result.append(f'    has_pivot_table_dropdown: {self.has_pivot_table_dropdown}')
+        result.append(f'    single_quote_prefix: {self.single_quote_prefix}')
+        return '\n'.join(result)
+
 
 class NumberFormat:
     @staticmethod
@@ -428,9 +555,15 @@ class FontList:
                 repository.write_poll(rprocessor)
             
             RecordDescriptor(BinaryRecordType.BrtEndFonts).write(rprocessor)
-        
-        
-        
+    
+    def __getitem__(self, key):
+        return self.fonts[key]
+    
+    def __iter__(self):
+        return iter(self.fonts)
+    
+    def __len__(self):
+        return len(self.fonts)
 
 class Font:
     @staticmethod
@@ -461,12 +594,13 @@ class Font:
                 bool(f_extend), bls, SubscriptType(sss), UnderlineType(uls), FontFamilyType(b_family), CharacterSetType(b_char_set),
                 brt_color, FontSchemeType(b_font_scheme), name)
     
-    def __init__(self, height, italic, strikeout, outline, shadow, condense, extend, weight,
-            subscript_type, underline_type, family, char_set_type, color, font_scheme, name):
+    def __init__(self, height=220, italic=False, strikeout=False, outline_only=False, shadow=False, condense=False, extend=False, weight=400,
+            subscript_type=SubscriptType.NONE, underline_type=UnderlineType.NONE, family=FontFamilyType.SWISS, char_set_type=CharacterSetType.ANSI_CHARSET,
+            color=Color(), font_scheme=FontSchemeType.MINOR, name='Calibri'):
         self.height = height
         self.italic = italic
         self.strikeout = strikeout
-        self.outline = outline
+        self.outline_only = outline_only
         self.shadow = shadow
         self.condense = condense
         self.extend = extend
@@ -479,6 +613,24 @@ class Font:
         self.font_scheme = font_scheme
         self.name = name
     
+    def __str__(self):
+        result = [f'Font: {self.name}']
+        result.append(f'    height: {self.height}')
+        result.append(f'    italic: {self.italic}')
+        result.append(f'    strikeout: {self.strikeout}')
+        result.append(f'    outline_only: {self.outline_only}')
+        result.append(f'    shadow: {self.shadow}')
+        result.append(f'    condense: {self.condense}')
+        result.append(f'    extend: {self.extend}')
+        result.append(f'    weight: {self.weight}')
+        result.append(f'    subscript_type: {self.subscript_type}')
+        result.append(f'    underline_type: {self.underline_type}')
+        result.append(f'    family: {self.family}')
+        result.append(f'    char_set_type: {self.char_set_type}')
+        result.append(f'    color: {self.color}')
+        result.append(f'    font_scheme: {self.font_scheme}')
+        return '\n'.join(result)
+    
     def write(self, stream):
         rprocessor = RecordProcessor.resolve(stream)
         
@@ -489,7 +641,7 @@ class Font:
             gr_bit |= 0x0002
         if self.strikeout:
             gr_bit |= 0x0008
-        if self.outline:
+        if self.outline_only:
             gr_bit |= 0x0010
         if self.shadow:
             gr_bit |= 0x0020
@@ -507,54 +659,6 @@ class Font:
     
     def __len__(self):
         return 21 + RecordProcessor.len_xl_w_string(self.name)
-
-
-
-
-class Color:
-    @staticmethod
-    def read(stream):
-        flags, index = stream.read(2)
-        f_valid_rgb = flags & 0x01
-        x_color_type = (flags & 0xfe) >> 1
-        
-        n_tint_and_shade = struct.unpack('<h', stream.read(2))[0]
-        b_red, b_green, b_blue, b_alpha = stream.read(4)
-        
-        color_type = ColorType(x_color_type)
-        if color_type == ColorType.INDEX:
-            index = IndexedColor(index)
-        elif color_type == ColorType.THEME:
-            index = ThemeColor(index)
-        
-        return Color(color_type, n_tint_and_shade, index, bool(f_valid_rgb), b_red, b_green, b_blue, b_alpha)
-        
-    def __init__(self, color_type, shade_amount, color_index, valid_argb, red, green, blue, alpha):
-        self.color_type = color_type
-        self.shade_amount = shade_amount
-        self.color_index = color_index
-        self.valid_argb = valid_argb
-        self.red = red
-        self.green = green
-        self.blue = blue
-        self.alpha = alpha
-    
-    def write(self, stream, write_header):
-        rprocessor = RecordProcessor.resolve(stream)
-        
-        if write_header:
-            RecordDescriptor(BinaryRecordType.BrtColor, len(self)).write(rprocessor)
-        
-        color_type = self.color_type
-        if color_type == ColorType.ARGB or self.valid_argb:
-            rprocessor.write((color_type.value << 1) | 0x01)
-        else:
-            rprocessor.write(color_type.value << 1)
-        
-        rprocessor.write(self.color_index.value)
-        
-        rprocessor.write(struct.pack('<h', self.shade_amount))
-        rprocessor.write(bytes((self.red, self.green, self.blue, self.alpha)))
 
 class StyleInfo:
     @staticmethod
@@ -582,7 +686,7 @@ class StyleInfo:
         self.built_in_level = built_in_level
         self.name = name
         self.repository = repository
-    
+    IndexedColor
     def write(self, stream):
         rprocessor = RecordProcessor.resolve(stream)
         
@@ -612,3 +716,136 @@ class StyleInfo:
     
     def __len__(self):
         return 8 + RecordProcessor.len_xl_w_string(self.name)
+
+class Fill:
+    @staticmethod
+    def read(stream):
+        fls = struct.unpack('<I', stream.read(4))[0]
+        
+        brt_color_fore = Color.read(stream)
+        brt_color_back = Color.read(stream)
+        
+        i_gradient_type, xnum_degree, xnum_fill_to_left, xnum_fill_to_right, xnum_fill_to_top, \
+                xnum_fill_to_bottom, c_num_stop = struct.unpack('<IdddddI', stream.read(48))
+        
+        xfill_gradient_stops = []
+        for i in range(c_num_stop):
+            brt_color = Color.read(stream)
+            xnum_position = struct.unpack('<d', stream.read(8))[0]
+        
+        return Fill(FillType(fls), brt_color_fore, brt_color_back, GradientType(i_gradient_type), xnum_degree, xnum_fill_to_left, xnum_fill_to_right,
+                xnum_fill_to_top, xnum_fill_to_bottom, xfill_gradient_stops)
+    
+    def __init__(self, fill_type, foreground_color, background_color, gradient_type, gradient_angle, gradient_fill_left, gradient_fill_right,
+            gradient_fill_top, gradient_fill_bottom, gradient_stops):
+        self.fill_type = fill_type
+        self.foreground_color = foreground_color
+        self.background_color = background_color
+        self.gradient_type = gradient_type
+        self.gradient_angle = gradient_angle
+        self.gradient_fill_left = gradient_fill_left
+        self.gradient_fill_right = gradient_fill_right
+        self.gradient_fill_top = gradient_fill_top
+        self.gradient_fill_bottom = gradient_fill_bottom
+        self.gradient_stops = gradient_stops
+    
+    def write(self, stream):
+        RecordDescriptor(BinaryRecordType.BrtFill, len(self)).write(stream)
+        
+        stream.write(struct.pack('<I', self.fill_type.value))
+        self.foreground_color.write(stream)
+        self.background_color.write(stream)
+        
+        gradient_stops = self.gradient_stops
+        stream.write(struct.pack('<IdddddI', self.gradient_type.value, self.gradient_angle, self.gradient_fill_left, self.gradient_fill_right,
+                self.gradient_fill_top, self.gradient_fill_bottom, len(gradient_stops)))
+        
+        for gradient_stop in gradient_stops:
+            gradient_stop.write(stream)
+    
+    def __len__(self):
+        return 4 + len(self.foreground_color) + len(self.background_color) + 48 + sum(len(i) for i in self.gradient_stops)
+
+class GradientStop:
+    @staticmethod
+    def read(stream):
+        brt_color = Color.read(stream)
+        xnum_position = struct.unpack('<d', stream.read(8))[0]
+        return GradientStop(brt_color, xnum_position)
+
+    def __init__(self, color, position):
+        self.color = color
+        self.position = position
+    
+    def write(self, stream):
+        self.color.write(stream)
+        stream.write(struct.pack('<d', self.position))
+    
+    def __len__(self):
+        return len(self.color) + 8
+
+
+class Border:
+    @staticmethod
+    def read(stream):
+        rprocessor = RecordProcessor.resolve(stream)
+        
+        flags = rprocessor.read(1)
+        f_bdr_diag_down = flags & 0x01
+        f_bdr_diag_up = flags & 0x02
+        reserved = 0xfc
+        
+        bxlf_top = BorderDefinition.read(stream)
+        bxlf_bottom = BorderDefinition.read(stream)
+        bxlf_left = BorderDefinition.read(stream)
+        bxlf_right = BorderDefinition.read(stream)
+        bxlf_diag = BorderDefinition.read(stream)
+        
+        return Border(bool(f_bdr_diag_down), bool(f_bdr_diag_up), bxlf_top, bxlf_bottom, bxlf_left, bxlf_right, bxlf_diag)
+    
+    def __init__(self, has_diagonal_down, has_diagonal_up, top, bottom, left, right, diagonal):
+        self.has_diagonal_down = has_diagonal_down
+        self.has_diagonal_up = has_diagonal_up
+        self.top = top
+        self.bottom = bottom
+        self.left = left
+        self.right = right
+        self.diagonal = diagonal
+    
+    def write(self, stream):
+        rprocessor = RecordProcessor.resolve(stream)
+        
+        RecordDescriptor(BinaryRecordType.BrtBorder, len(self)).write(rprocessor)
+        
+        flags = 0
+        if self.has_diagonal_down:
+            flags |= 0x01
+        if self.has_diagonal_up:
+            flags |= 0x02
+        rprocessor.write(flags)
+        
+        self.top.write(stream)
+        self.bottom.write(stream)
+        self.left.write(stream)
+        self.right.write(stream)
+        self.diagonal.write(stream)
+    
+    def __len__(self):
+        return 51
+
+
+class BorderDefinition:
+    @staticmethod
+    def read(stream):
+        dg, reserved = stream.read(2)
+        brt_color = Color.read(stream)
+        
+        return BorderDefinition(BorderType(dg), brt_color)
+    
+    def __init__(self, border_type, color):
+        self.border_type = border_type
+        self.color = color
+    
+    def write(self, stream):
+        stream.write(bytes((self.border_type.value, 0)))
+        self.color.write(stream)

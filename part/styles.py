@@ -3,7 +3,7 @@
 import struct
 
 from btypes import BinaryRecordType, HorizontalAlignmentType, VerticalAlignmentType, ReadingOrderType, XFProperty, ColorType, \
-        IndexedColor, ThemeColor, SubscriptType, UnderlineType, FontFamilyType, CharacterSetType, FontSchemeType, FillType, GradientType, \
+        PaletteColor, ThemeColor, SubscriptType, UnderlineType, FontFamilyType, CharacterSetType, FontSchemeType, FillType, GradientType, \
         BorderType
 from bprocessor import UnexpectedRecordException, RecordProcessor, RecordRepository, RecordDescriptor
 from part import ACUid
@@ -240,7 +240,8 @@ class StylesheetPart:
     def write(self, stream):
         rprocessor = RecordProcessor.resolve(stream)
         repository = self.repository
-        repository.begin_write()
+        if repository:
+            repository.begin_write()
         
         RecordDescriptor(BinaryRecordType.BrtBeginStyleSheet).write(rprocessor)
         
@@ -312,21 +313,95 @@ class Color:
         
         color_type = ColorType(x_color_type)
         if color_type == ColorType.INDEX:
-            index = IndexedColor(index)
+            index = PaletteColor(index)
         elif color_type == ColorType.THEME:
             index = ThemeColor(index)
         
         return Color(color_type, n_tint_and_shade, index, bool(f_valid_rgb), b_red, b_green, b_blue, b_alpha)
         
-    def __init__(self, color_type, shade_amount, color_index, valid_argb, red, green, blue, alpha):
+    def __init__(self, color_type, shade_amount, color_index, valid_rgba, red, green, blue, alpha):
         self.color_type = color_type
         self.shade_amount = shade_amount
         self.color_index = color_index
-        self.valid_argb = valid_argb
+        self.valid_rgba = valid_rgba
+        self._red = red
+        self._green = green
+        self._blue = blue
+        self._alpha = alpha
+    
+    
+    @property
+    def red(self):
+        return self._red
+    
+    @red.setter
+    def red(self, value):
+        self.color_type = ColorType.RGBA
+        self._red = value
+    
+    @property
+    def green(self):
+        return self._green
+    
+    @green.setter
+    def green(self, value):
+        self.color_type = ColorType.RGBA
+        self._green = value
+    
+    @property
+    def blue(self):
+        return self._blue
+    
+    @blue.setter
+    def blue(self, value):
+        self.color_type = ColorType.RGBA
+        self._blue = value
+    
+    @property
+    def alpha(self):
+        return self._alpha
+    
+    @alpha.setter
+    def alpha(self, value):
+        self.color_type = ColorType.RGBA
+        self._alpha = value
+    
+    
+    def set_palette(self, palette_color):
+        self.color_type = ColorType.PALETTE
+        self.color_index = palette_color
+        rgba = palette_color.get_rgba()
+        if rgba is not None:
+            self._set_rgba_int32(rgba)
+        else:
+            self.valid_rgba = False
+    
+    def set_theme(self, theme_color):
+        self.color_type = ColorType.THEME
+        self.color_index = theme_color
+        self.valid_rgba = False
+    
+    
+    
+    def set_rgba(self, red, green, blue, alpha):
+        self.color_type = ColorType.RGBA
         self.red = red
         self.green = green
         self.blue = blue
         self.alpha = alpha
+    
+    def set_rgba_packed(self, rgba_int32):
+        self.color_type = ColorType.RGBA
+        self._set_rgba_int32(rgba_int32)
+    
+    
+    
+    
+    def _set_rgba_int32(self, rgba_int32):
+        self.valid_rgba = True
+        self.red, self.green, self.blue, self.alpha = struct.pack('>I', rgba_int32)
+    
+    
     
     def write(self, stream, write_header=False):
         rprocessor = RecordProcessor.resolve(stream)
@@ -335,19 +410,19 @@ class Color:
             RecordDescriptor(BinaryRecordType.BrtColor, len(self)).write(rprocessor)
         
         color_type = self.color_type
-        if color_type == ColorType.ARGB or self.valid_argb:
+        if color_type == ColorType.RGBA or self.valid_rgba:
             rprocessor.write((color_type.value << 1) | 0x01)
         else:
             rprocessor.write(color_type.value << 1)
         
         color_index = self.color_index
-        rprocessor.write(color_index.value if isinstance(color_index, (IndexedColor, ThemeColor)) else color_index)
+        rprocessor.write(color_index.value if isinstance(color_index, (PaletteColor, ThemeColor)) else color_index)
         
         rprocessor.write(struct.pack('<h', self.shade_amount))
         rprocessor.write(bytes((self.red, self.green, self.blue, self.alpha)))
     
     def __str__(self):
-        return f'Color: {self.color_type}; i: {self.color_index}; ARGB (valid): {self.alpha}, {self.red}, {self.green}, {self.blue} ({self.valid_argb}); Shade: {self.shade_amount}'
+        return f'Color: {self.color_type}; i: {self.color_index}; ARGB (valid): {self.alpha}, {self.red}, {self.green}, {self.blue} ({self.valid_rgba}); Shade: {self.shade_amount}'
     
     def __len__(self):
         return 8
@@ -756,8 +831,8 @@ class StyleInfo:
 class Fill:
     @staticmethod
     def create_default():
-        return Fill(fill_type=FillType.NONE, foreground_color=Color(ColorType.INDEX, 0, IndexedColor.icvForeground, True, 0, 0, 0, 255), 
-            background_color=Color(ColorType.INDEX, 0, IndexedColor.icvBackground, True, 255, 255, 255, 255), gradient_type=GradientType.LINEAR, gradient_angle=0.0,
+        return Fill(fill_type=FillType.NONE, foreground_color=Color(ColorType.PALETTE, 0, PaletteColor.icvForeground, True, 0, 0, 0, 255), 
+            background_color=Color(ColorType.PALETTE, 0, PaletteColor.icvBackground, True, 255, 255, 255, 255), gradient_type=GradientType.LINEAR, gradient_angle=0.0,
             gradient_fill_left=0.0, gradient_fill_right=0.0, gradient_fill_top=0.0, gradient_fill_bottom=0.0, gradient_stops=[])
     
     @staticmethod

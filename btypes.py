@@ -14,6 +14,7 @@ class RelationshipType(Enum):
     SHARED_STRINGS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings'
     CALCULATION_CHAIN = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain'
     STYLES = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles'
+    THEME = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme'
     
     @staticmethod
     def resolve(value):
@@ -40,6 +41,7 @@ class ContentType(Enum):
     WORKSHEET = 'application/vnd.ms-excel.worksheet'
     CALCULATION_CHAIN = 'application/vnd.ms-excel.calcChain'
     STYLES = 'application/vnd.ms-excel.styles'
+    THEME = 'application/vnd.openxmlformats-officedocument.theme+xml'
     
     @staticmethod
     def resolve(value):
@@ -60,9 +62,7 @@ class OtherContentType:
         return f'{self.name}: {self.value}'
 
 
-class XMLNSName(Enum):
-    RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships'
-    CONTENT_TYPES = 'http://schemas.openxmlformats.org/package/2006/content-types'
+
 
 
 class BinaryRecordType(Enum):
@@ -157,7 +157,7 @@ class BinaryRecordType(Enum):
     BrtBeginHeaderFooter = 479
     BrtBeginIconSet = 465
     BrtBeginIconSet14 = 1052
-    BrtBeginIndexedColors = 565
+    BrtBeginPaletteColors = 565
     BrtBeginISXTHCols = 322
     BrtBeginISXTHRws = 320
     BrtBeginISXVDCols = 311
@@ -506,7 +506,7 @@ class BinaryRecordType(Enum):
     BrtEndHeaderFooter = 480
     BrtEndIconSet = 466
     BrtEndIconSet14 = 1155
-    BrtEndIndexedColors = 566
+    BrtEndPaletteColors = 566
     BrtEndISXTHCols = 323
     BrtEndISXTHRws = 321
     BrtEndISXVDCols = 312
@@ -749,7 +749,7 @@ class BinaryRecordType(Enum):
     BrtIconFilter = 169
     BrtIconFilter14 = 1181
     BrtIndexBlock = 42
-    BrtIndexedColor = 475
+    BrtPaletteColor = 475
     BrtIndexPartEnd = 277
     BrtIndexRowBlock = 40
     BrtInfo = 398
@@ -976,11 +976,11 @@ class XFProperty(Enum):
 
 class ColorType(Enum):
     AUTO = 0x00
-    INDEX = 0x01
-    ARGB = 0x02
+    PALETTE = 0x01
+    RGBA = 0x02
     THEME = 0x03
 
-class IndexedColor(Enum):
+class PaletteColor(Enum):
     icvBlack = 0x00         # 0x000000FF
     icvWhite = 0x01         # 0xFFFFFFFF
     icvRed = 0x02           # 0xFF0000FF
@@ -1063,6 +1063,74 @@ class IndexedColor(Enum):
     icvCrtNeutral = 0x4F    # 0x000000FF
     icvInfoBk = 0x50        # System background color for tooltip controls.
     icvInfoText = 0x51      # System text color for tooltip controls.
+    
+    def get_rgba(self):
+        if self == PaletteColor.icvBlack: return 0x000000FF
+        elif self == PaletteColor.icvWhite: return 0xFFFFFFFF
+        elif self == PaletteColor.icvRed: return 0xFF0000FF
+        elif self == PaletteColor.icvGreen: return 0x00FF00FF
+        elif self == PaletteColor.icvBlue: return 0x0000FFFF
+        elif self == PaletteColor.icvYellow: return 0xFFFF00FF
+        elif self == PaletteColor.icvMagenta: return 0xFF00FFFF
+        elif self == PaletteColor.icvCyan: return 0x00FFFFFF
+        elif self == PaletteColor.icvPlt1: return 0x000000FF
+        elif self == PaletteColor.icvPlt2: return 0xFFFFFFFF
+        elif self == PaletteColor.icvPlt3: return 0xFF0000FF
+        elif self == PaletteColor.icvPlt4: return 0x00FF00FF
+        elif self == PaletteColor.icvPlt5: return 0x0000FFFF
+        elif self == PaletteColor.icvPlt6: return 0xFFFF00FF
+        elif self == PaletteColor.icvPlt7: return 0xFF00FFFF
+        elif self == PaletteColor.icvPlt8: return 0x00FFFFFF
+        elif self == PaletteColor.icvPlt9: return 0x800000FF
+        elif self == PaletteColor.icvPlt10: return 0x008000FF
+        elif self == PaletteColor.icvPlt11: return 0x000080FF
+        elif self == PaletteColor.icvPlt12: return 0x808000FF
+        elif self == PaletteColor.icvPlt13: return 0x800080FF
+        elif self == PaletteColor.icvPlt14: return 0x008080FF
+        elif self == PaletteColor.icvPlt15: return 0xC0C0C0FF
+        elif self == PaletteColor.icvPlt16: return 0x808080FF
+        elif self == PaletteColor.icvPlt17: return 0x9999FFFF
+        elif self == PaletteColor.icvPlt18: return 0x993366FF
+        elif self == PaletteColor.icvPlt19: return 0xFFFFCCFF
+        elif self == PaletteColor.icvPlt20: return 0xCCFFFFFF
+        elif self == PaletteColor.icvPlt21: return 0x660066FF
+        elif self == PaletteColor.icvPlt22: return 0xFF8080FF
+        elif self == PaletteColor.icvPlt23: return 0x0066CCFF
+        elif self == PaletteColor.icvPlt24: return 0xCCCCFFFF
+        elif self == PaletteColor.icvPlt25: return 0x000080FF
+        elif self == PaletteColor.icvPlt26: return 0xFF00FFFF
+        elif self == PaletteColor.icvPlt27: return 0xFFFF00FF
+        elif self == PaletteColor.icvPlt28: return 0x00FFFFFF
+        elif self == PaletteColor.icvPlt29: return 0x800080FF
+        elif self == PaletteColor.icvPlt30: return 0x800000FF
+        elif self == PaletteColor.icvPlt31: return 0x008080FF
+        elif self == PaletteColor.icvPlt32: return 0x0000FFFF
+        elif self == PaletteColor.icvPlt33: return 0x00CCFFFF
+        elif self == PaletteColor.icvPlt34: return 0xCCFFFFFF
+        elif self == PaletteColor.icvPlt35: return 0xCCFFCCFF
+        elif self == PaletteColor.icvPlt36: return 0xFFFF99FF
+        elif self == PaletteColor.icvPlt37: return 0x99CCFFFF
+        elif self == PaletteColor.icvPlt38: return 0xFF99CCFF
+        elif self == PaletteColor.icvPlt39: return 0xCC99FFFF
+        elif self == PaletteColor.icvPlt40: return 0xFFCC99FF
+        elif self == PaletteColor.icvPlt41: return 0x3366FFFF
+        elif self == PaletteColor.icvPlt42: return 0x33CCCCFF
+        elif self == PaletteColor.icvPlt43: return 0x99CC00FF
+        elif self == PaletteColor.icvPlt44: return 0xFFCC00FF
+        elif self == PaletteColor.icvPlt45: return 0xFF9900FF
+        elif self == PaletteColor.icvPlt46: return 0xFF6600FF
+        elif self == PaletteColor.icvPlt47: return 0x666699FF
+        elif self == PaletteColor.icvPlt48: return 0x969696FF
+        elif self == PaletteColor.icvPlt49: return 0x003366FF
+        elif self == PaletteColor.icvPlt50: return 0x339966FF
+        elif self == PaletteColor.icvPlt51: return 0x003300FF
+        elif self == PaletteColor.icvPlt52: return 0x333300FF
+        elif self == PaletteColor.icvPlt53: return 0x993300FF
+        elif self == PaletteColor.icvPlt54: return 0x993366FF
+        elif self == PaletteColor.icvPlt55: return 0x333399FF
+        elif self == PaletteColor.icvPlt56: return 0x333333FF
+        elif self == PaletteColor.icvCrtNeutral: return 0x000000FF
+        else: return None
 
 class ThemeColor(Enum):
     DK_1 = 0x00

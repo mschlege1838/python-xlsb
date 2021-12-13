@@ -64,7 +64,6 @@ class RecordDescriptor:
     def skip(self, target, repository=None):
         if repository and repository.for_update:
             data = target.read(self.size, single_as_int=False)
-            # print(self, data)
             repository.store(self, data)
         else:
             target.seek(self.size, io.SEEK_CUR)

@@ -29,6 +29,10 @@ def check_poll(self, stream):
 
 class WorksheetPart:
     @staticmethod
+    def create_default():
+        return WorksheetPart(None, [], [])
+    
+    @staticmethod
     def read(stream, for_update=False):
         rprocessor = RecordProcessor.resolve(stream)
         repository = RecordRepository(for_update)
@@ -190,7 +194,8 @@ class WorksheetPart:
     def write(self, stream):
         rprocessor = RecordProcessor.resolve(stream)
         repository = self.repository
-        repository.begin_write()
+        if repository:
+            repository.begin_write()
         
         # Begin
         RecordDescriptor(BinaryRecordType.BrtBeginSheet).write(rprocessor)
@@ -201,7 +206,6 @@ class WorksheetPart:
         
         # Sheet Dimension
         sheet_dimension = self.sheet_dimension
-        sheet_dimension.refresh_from(self.rows)
         sheet_dimension.write(rprocessor)
         
         # Skip 2
@@ -228,9 +232,10 @@ class WorksheetPart:
             repository.write_poll(rprocessor)
         
         RecordDescriptor(BinaryRecordType.BrtEndSheet).write(rprocessor)
-        repository.close()
+        if repository:
+            repository.close()
 
-class Cell:
+class CellHeader:
     @staticmethod
     def read(stream):
         rprocessor = RecordProcessor.resolve(stream)
@@ -242,7 +247,7 @@ class Cell:
         show_phonetic_info = flags & 0x01
         reserved = flags & 0xfe
         
-        return Cell(column, i_style_ref, bool(show_phonetic_info))
+        return CellHeader(column, i_style_ref, bool(show_phonetic_info))
     
     def __init__(self, column, style_index, show_phonetic_info):
         self.column = column
@@ -260,10 +265,10 @@ class Cell:
 class BlankCell:
     @staticmethod
     def read(stream, *, repository=None):
-        return BlankCell(Cell.read(stream), repository=repository)
+        return BlankCell(CellHeader.read(stream), repository=repository)
     
-    def __init__(self, cell, *, repository=None):
-        self.cell = cell
+    def __init__(self, header, *, repository=None):
+        self.header = header
         self.repository = repository
     
     @property
@@ -273,10 +278,10 @@ class BlankCell:
     def write(self, stream):
         check_poll(self, stream)
         RecordDescriptor(BinaryRecordType.BrtCellBlank, len(self)).write(stream)
-        self.cell.write(stream)
+        self.header.write(stream)
     
     def __len__(self):
-        return len(self.cell)
+        return len(self.header)
 
 
 class RkCell:
@@ -290,7 +295,7 @@ class RkCell:
     
     @staticmethod
     def read(stream, *, repository=None):
-        cell = Cell.read(stream)
+        header = CellHeader.read(stream)
         
         r = stream.read(4)
         rbuf = bytearray(r)
@@ -307,10 +312,10 @@ class RkCell:
         if f_x100:
             num /= 100
         
-        return RkCell(cell, num, repository=repository)
+        return RkCell(header, num, repository=repository)
     
-    def __init__(self, cell, num, *, repository=None):
-        self.cell = cell
+    def __init__(self, header, num, *, repository=None):
+        self.header = header
         self.num = num
         self.repository = repository
     
@@ -321,7 +326,7 @@ class RkCell:
     def write(self, stream):
         check_poll(self, stream)
         RecordDescriptor(BinaryRecordType.BrtCellRk, len(self)).write(stream)
-        self.cell.write(stream)
+        self.header.write(stream)
         
         num = self.num
         flags = 0
@@ -343,21 +348,21 @@ class RkCell:
         
     
     def __len__(self):
-        return len(self.cell) + 4
+        return len(self.header) + 4
 
 class ErrorCell:
     @staticmethod
     def read(stream, *, repository=None):
         rprocessor = RecordProcessor.resolve(stream)
         
-        cell = Cell.read(rprocessor)
+        header = CellHeader.read(rprocessor)
         b_error = rprocessor.read(1)
         
-        return ErrorCell(cell, b_error, repository=repository)
+        return ErrorCell(header, b_error, repository=repository)
         
     
-    def __init__(self, cell, error_number, *, repository=None):
-        self.cell = cell
+    def __init__(self, header, error_number, *, repository=None):
+        self.header = header
         self.error_number = error_number
         self.repository = repository
     
@@ -376,11 +381,11 @@ class ErrorCell:
     def write(self, stream):
         check_poll(self, stream)
         RecordDescriptor(BinaryRecordType.BrtCellError, len(self)).write(stream)
-        self.cell.write(stream)
+        self.header.write(stream)
         RecordProcessor.resolve(stream).write(self.error_number)
     
     def __len__(self):
-        return len(self.cell) + 1
+        return len(self.header) + 1
     
     
 
@@ -390,14 +395,14 @@ class BoolCell:
     def read(stream, *, repository=None):
         rprocessor = RecordProcessor.resolve(stream)
         
-        cell = Cell.read(stream)
+        header = CellHeader.read(stream)
         f_bool = stream.read(1)
         
-        return BoolCell(cell, bool(f_bool), repository=repository)
+        return BoolCell(header, bool(f_bool), repository=repository)
         
     
-    def __init__(self, cell, val, *, repository=None):
-        self.cell = cell
+    def __init__(self, header, val, *, repository=None):
+        self.header = header
         self.val = val
         self.repository = repository
     
@@ -408,11 +413,11 @@ class BoolCell:
     def write(self, stream):
         check_poll(self, stream)
         RecordDescriptor(BinaryRecordType.BrtCellBool, len(self)).write(stream)
-        self.cell.write(stream)
+        self.header.write(stream)
         RecordProcessor.resolve(stream).write(1 if self.val else 0)
     
     def __len__(self):
-        return len(self.cell) + 1
+        return len(self.header) + 1
 
 
 class RealCell:
@@ -423,13 +428,13 @@ class RealCell:
     
     @staticmethod
     def read(stream, *, repository=None):
-        cell = Cell.read(stream)
+        header = CellHeader.read(stream)
         xnum = struct.unpack('<d', stream.read(8))[0]
-        return RealCell(cell, xnum, repository=repository)
+        return RealCell(header, xnum, repository=repository)
     
-    def __init__(self, cell, num, *, repository=None):
+    def __init__(self, header, num, *, repository=None):
         RealCell.validate_xnum(num)
-        self.cell = cell
+        self.header = header
         self.num = num
         self.repository = repository
     
@@ -440,25 +445,25 @@ class RealCell:
     def write(self, stream):
         check_poll(self, stream)
         RecordDescriptor(BinaryRecordType.BrtCellReal, len(self)).write(stream)
-        self.cell.write(stream)
+        self.header.write(stream)
         num = self.num
         RealCell.validate_xnum(num)
         stream.write(struct.pack('<d', num))
     
     def __len__(self):
-        return len(self.cell) + 8
+        return len(self.header) + 8
 
 
 class SharedStringCell:
     @staticmethod
     def read(stream, *, repository=None):
-        cell = Cell.read(stream)
+        header = CellHeader.read(stream)
         isst = struct.unpack('<I', stream.read(4))[0]
-        return SharedStringCell(cell, isst, repository=repository)
+        return SharedStringCell(header, isst, repository=repository)
 
 
-    def __init__(self, cell, str_index, *, repository=None):
-        self.cell = cell
+    def __init__(self, header, str_index, *, repository=None):
+        self.header = header
         self.str_index = str_index
         self.repository = repository
     
@@ -469,11 +474,11 @@ class SharedStringCell:
     def write(self, stream):
         check_poll(self, stream)
         RecordDescriptor(BinaryRecordType.BrtCellIsst, len(self)).write(stream)
-        self.cell.write(stream)
+        self.header.write(stream)
         stream.write(struct.pack('<I', self.str_index))
     
     def __len__(self):
-        return len(self.cell) + 4
+        return len(self.header) + 4
     
     
 
@@ -487,13 +492,13 @@ class InlineStringCell:
     @staticmethod
     def read(stream, *, repository=None):
         rprocessor = RecordProcessor.resolve(stream)
-        cell = Cell.read(rprocessor)
+        header = CellHeader.read(rprocessor)
         val = rprocessor.read_xl_w_string(False)
-        return InlineStringCell(cell, val, repository=repository)
+        return InlineStringCell(header, val, repository=repository)
     
-    def __init__(self, cell, val, *, repository=None):
+    def __init__(self, header, val, *, repository=None):
         InlineStringCell.check_value(val)
-        self.cell = cell
+        self.header = header
         self.val = val
         self.repository = repository
     
@@ -504,11 +509,11 @@ class InlineStringCell:
     def write(self, stream):
         check_poll(self, stream)
         RecordDescriptor(BinaryRecordType.BrtCellSt, len(self)).write(stream)
-        self.cell.write(stream)
+        self.header.write(stream)
         RecordProcessor.resolve(stream).write_xl_w_string(self.val, False)
     
     def __len__(self):
-        return len(self.cell) + len(self.val) * 2
+        return len(self.header) + len(self.val) * 2
 
 
 class Row:
@@ -528,6 +533,9 @@ class Row:
         self.header.write(stream)
         for cell in self.cells:
             cell.write(stream)
+    
+    def __str__(self):
+        return str(self.header)
 
 class RowHeader:
     @staticmethod
@@ -581,7 +589,7 @@ class RowHeader:
                 bool(f_unsynced), bool(f_ghost_dirty), bool(f_ph_show), col_spans)
     
     def __init__(self, row_index, style_index, row_height, allocate_asc_padding, allocate_desc_padding, outline_level, outline_collapsed,
-            hidden, manual_height, ghost_dirty, has_phonetic_guide, col_spans):
+            hidden, manual_height, style_applicable, has_phonetic_guide, col_spans):
         RowHeader.validate_outline_level(outline_level)
         RowHeader.validate_ccol_span(len(col_spans))
         
@@ -594,7 +602,7 @@ class RowHeader:
         self.outline_collapsed = outline_collapsed
         self.hidden = hidden
         self.manual_height = manual_height
-        self.ghost_dirty = ghost_dirty
+        self.style_applicable = style_applicable
         self.has_phonetic_guide = has_phonetic_guide
         self.col_spans = col_spans
     
@@ -621,7 +629,7 @@ class RowHeader:
             flags |= 0x10
         if self.manual_height:
             flags |= 0x20
-        if self.ghost_dirty:
+        if self.style_applicable:
             flags |= 0x40
         rprocessor.write(flags)
         
@@ -640,6 +648,21 @@ class RowHeader:
     
     def __len__(self):
         return 17 + sum(len(sp) for sp in self.col_spans)
+    
+    def __str__(self):
+        result = [f'Row: {self.row_index}']
+        result.append(f'    style_index: {self.style_index}')
+        result.append(f'    row_height: {self.row_height}')
+        result.append(f'    allocate_asc_padding: {self.allocate_asc_padding}')
+        result.append(f'    allocate_desc_padding: {self.allocate_desc_padding}')
+        result.append(f'    outline_level: {self.outline_level}')
+        result.append(f'    outline_collapsed: {self.outline_collapsed}')
+        result.append(f'    hidden: {self.hidden}')
+        result.append(f'    manual_height: {self.manual_height}')
+        result.append(f'    style_applicable: {self.style_applicable}')
+        result.append(f'    has_phonetic_guide: {self.has_phonetic_guide}')
+        result.append(f'    col_spans: {", ".join(str(c) for c in self.col_spans)}')
+        return '\n'.join(result)
 
 
 class ColumnSpan:
@@ -661,6 +684,9 @@ class ColumnSpan:
     
     def __len__(self):
         return 8
+    
+    def __str__(self):
+        return f'({self.col_first}, {self.col_last})'
     
 
 
@@ -726,6 +752,9 @@ class SheetDimension:
     
     def __len__(self):
         return 16
+    
+    def __str__(self):
+        return f'Sheet Dimension: (row_first, col_first): ({self.row_first} {self.col_first}); (row_last, col_last): ({self.row_last}, {self.col_last})'
 
 class ColInfo:
     @staticmethod
@@ -752,7 +781,7 @@ class ColInfo:
                 bool(f_phonetic), i_out_level, bool(f_collapsed))
     
     def __init__(self, col_first, col_last, col_width, style_index, hidden, user_width_set, best_fit_set,
-            phonetic, outline_level, outline_collapsed):
+            has_phonetic_guide, outline_level, outline_collapsed):
         self.col_first = col_first
         self.col_last = col_last
         self.col_width = col_width
@@ -760,7 +789,7 @@ class ColInfo:
         self.hidden = hidden
         self.user_width_set = user_width_set
         self.best_fit_set = best_fit_set
-        self.phonetic = phonetic
+        self.has_phonetic_guide = has_phonetic_guide
         self.outline_level = outline_level
         self.outline_collapsed = outline_collapsed
         self.validate()
@@ -784,7 +813,7 @@ class ColInfo:
             flags |= 0x02
         if self.best_fit_set:
             flags |= 0x04
-        if self.phonetic:
+        if self.has_phonetic_guide:
             flags |= 0x08
         rprocessor.write(flags)
         
@@ -811,3 +840,16 @@ class ColInfo:
     
     def __len__(self):
         return 18
+    
+    def __str__(self):
+        result = [f'Column Info: ({self.col_first}, {self.col_last})']
+        result.append(f'    col_width: {self.col_width}')
+        result.append(f'    style_index: {self.style_index}')
+        result.append(f'    hidden: {self.hidden}')
+        result.append(f'    user_width_set: {self.user_width_set}')
+        result.append(f'    best_fit_set: {self.best_fit_set}')
+        result.append(f'    has_phonetic_guide: {self.has_phonetic_guide}')
+        result.append(f'    outline_level: {self.outline_level}')
+        result.append(f'    outline_collapsed: {self.outline_collapsed}')
+        return '\n'.join(result)
+        

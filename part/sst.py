@@ -63,6 +63,9 @@ class SharedStringsPart:
         
         RecordDescriptor(BinaryRecordType.BrtEndSst).write(rprocessor)
     
+    def __getitem__(self, i):
+        return self.items[i]
+    
 
 class RichStr:
     @staticmethod

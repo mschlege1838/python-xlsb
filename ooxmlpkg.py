@@ -6,14 +6,17 @@ import xml.etree.ElementTree as ET
 
 from enum import Enum
 from tempfile import TemporaryDirectory
-from zipfile import ZipFile, ZIP_DEFLATED
+from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo
 from collections import deque
+from datetime import datetime
 
 from btypes import RelationshipType, ContentType
 
 
 def rec_zip(fname, src_dir):
     zf = ZipFile(fname, 'w', ZIP_DEFLATED, compresslevel=6)
+    ts = datetime.now()
+    ts = (ts.year, ts.month, ts.day, ts.hour, ts.minute, ts.second)
     
     if not str(src_dir).endswith(os.sep):
         src_dir = str(src_dir) + os.sep
@@ -23,7 +26,7 @@ def rec_zip(fname, src_dir):
             if e.is_dir():
                 rec_helper(e)
             else:
-                with zf.open(e.path.replace(str(src_dir), ''), 'w') as dest, open(e, 'rb') as src:
+                with zf.open(ZipInfo(e.path.replace(str(src_dir), ''), ts), 'w') as dest, open(e, 'rb') as src:
                     dest.write(src.read())
     
     rec_helper(src_dir)
@@ -217,7 +220,7 @@ class ZipOfficeOpenXMLPackage:
         if not exists or overwrite:
             extract_dir = self.extract_dir = TemporaryDirectory()
             with open(os.path.join(extract_dir.name, '[Content_Types].xml'), 'w', encoding='utf-8') as f:
-                f.write('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>')
+                f.write('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/></Types>')
 
     def register_on_close_hook(self, closeable):
         on_close_hooks = self.on_close_hooks

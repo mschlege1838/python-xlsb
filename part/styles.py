@@ -303,6 +303,15 @@ class StylesheetPart:
 
 class Color:
     @staticmethod
+    def from_rgba(red, green, blue, alpha):
+        return Color(ColorType.RGBA, 0, 0, True, red, green, blue, alpha)
+    
+    @staticmethod
+    def from_rgba_packed(rgba_int32):
+        red, green, blue, alpha = struct.pack('>I', rgba_int32)
+        return Color.from_rgba(red, green, blue, alpha)
+    
+    @staticmethod
     def read(stream):
         flags, index = stream.read(2)
         f_valid_rgb = flags & 0x01
@@ -592,16 +601,21 @@ class NumberFormat:
         return NumberFormat(ifmt, st_fmt_code, repository=repository)
     
     def __init__(self, format_id, format_str, *, repository=None):
-        if not (5 <= format_id <= 8 or 23 <= format_id <= 26 or 41 <= format_id <= 44 or 63 <= format_id <= 66 or 164 <= format_id <= 382):
-            raise ValueError(f'Format ID must be between one of the following ranges [5, 8] [23, 26] [41, 44] [63, 66] [164, 382]: {format_id}')
-        if not (1 <= len(format_str) <= 255):
-            raise ValueError(f'Format string must between 1 and 255 characters: {format_str} ({len(format_str)} characters)')
+        
         
         self.format_id = format_id
         self.format_str = format_str
         self.repository = repository
     
     def write(self, stream):
+        format_id = self.format_id
+        if not (5 <= format_id <= 8 or 23 <= format_id <= 26 or 41 <= format_id <= 44 or 63 <= format_id <= 66 or 164 <= format_id <= 382):
+            raise ValueError(f'Format ID must be between one of the following ranges [5, 8] [23, 26] [41, 44] [63, 66] [164, 382]: {format_id}')
+        
+        format_str = self.format_str
+        if not (1 <= len(format_str) <= 255):
+            raise ValueError(f'Format string must between 1 and 255 characters: {format_str} ({len(format_str)} characters)')
+            
         rprocessor = RecordProcessor.resolve(stream)
         repository = self.repository
         
@@ -610,12 +624,14 @@ class NumberFormat:
             repository.write_poll(rprocessor)
         
         RecordDescriptor(BinaryRecordType.BrtFmt, len(self)).write(rprocessor)
-        rprocessor.write(struct.pack('<H', self.format_id))
-        rprocessor.write_xl_w_string(self.format_str, False)
+        rprocessor.write(struct.pack('<H', format_id))
+        rprocessor.write_xl_w_string(format_str, False)
         
         # Skip2
         if repository:
             repository.write_poll(rprocessor)
+    
+    
     
     def __len__(self):
         return 2 + RecordProcessor.len_xl_w_string(self.format_str)
@@ -729,6 +745,9 @@ class Font:
         return '\n'.join(result)
     
     def write(self, stream):
+        weight = self.weight
+        if not 0x0190 <= weight <= 0x03e8
+        
         rprocessor = RecordProcessor.resolve(stream)
         
         RecordDescriptor(BinaryRecordType.BrtFont, len(self)).write(rprocessor)
@@ -747,7 +766,7 @@ class Font:
         if self.extend:
             gr_bit |= 0x0080
         
-        rprocessor.write(struct.pack('<HHHH', self.height, gr_bit, self.weight, self.subscript_type.value))
+        rprocessor.write(struct.pack('<HHHH', self.height, gr_bit, weight, self.subscript_type.value))
         rprocessor.write(bytes((self.underline_type.value, self.family.value, self.char_set_type.value, 0)))
         self.color.write(rprocessor, False)
         rprocessor.write(self.font_scheme.value)

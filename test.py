@@ -66,13 +66,32 @@ elif sys.argv[1] == 'i':
 
 elif sys.argv[1] == 'w':
     from part.styles import StylesheetPart
-
-    with open(sys.argv[2], 'rb') as f:
-        styles = StylesheetPart.read(f, True)
+    from part.workbook import WorkbookPart, BundledSheet, HiddenState
+    from part.worksheet import WorksheetPart, ColInfo
+    from ooxmlpkg import ZipOfficeOpenXMLPackage
+    from btypes import RelationshipType, ContentType
+    
+    with ZipOfficeOpenXMLPackage(sys.argv[2], True) as pkg:
+        ws = WorksheetPart.create_default()
+        stylesheet = StylesheetPart.create_default()
         
-    with open(sys.argv[2] + '_', 'wb') as f:
-        styles.write(f)
-
+        with pkg.open_part('/xl/worksheets/sheet1.bin', 'w', ContentType.WORKSHEET) as f:
+            ws.write(f)
+        with pkg.open_part('/xl/styles.bin', 'w', ContentType.STYLES) as f:
+            stylesheet.write(f)
+        
+        with pkg.open_part_relationships('/xl/workbook.bin', 'w') as rels:
+            sheet_rid = rels.add_rel(RelationshipType.WORKSHEET, 'worksheets/sheet1.bin')
+        
+        wb = WorkbookPart(None, [BundledSheet(HiddenState.VISIBLE, 1, sheet_rid, 'Sheet1')])
+        with pkg.open_part('/xl/workbook.bin', 'w', ContentType.WORKBOOK) as f:
+            wb.write(f)
+        
+        with pkg.open_part_relationships('/xl/workbook.bin', 'w') as rels:
+            rels.add_rel(RelationshipType.STYLES, 'styles.bin')
+        with pkg.open_part_relationships('/', 'w') as rels:
+            rels.add_rel(RelationshipType.WORKBOOK, 'xl/workbook.bin')
+    
 
 elif sys.argv[1] == 'c':
     import os.path
